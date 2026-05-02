@@ -25,6 +25,20 @@ class MatchingTests(unittest.TestCase):
             )
         )
 
+    def test_titles_reject_short_title_inside_longer_candidate(self):
+        score = title_similarity(
+            "The human oral microbiome",
+            "The exposome and the human oral microbiome through the one health lens",
+        )
+
+        self.assertLess(score, 0.82)
+        self.assertFalse(
+            titles_match(
+                "The human oral microbiome",
+                "The exposome and the human oral microbiome through the one health lens",
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

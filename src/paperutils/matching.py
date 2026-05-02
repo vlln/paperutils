@@ -31,12 +31,12 @@ def title_similarity(query: str, candidate: str | None) -> float:
     ratio = SequenceMatcher(None, left, right).ratio()
     left_words = set(left.split())
     right_words = set(right.split())
-    overlap = len(left_words & right_words) / max(len(left_words), 1)
-    return max(ratio, overlap)
+    shared_words = left_words & right_words
+    jaccard = len(shared_words) / max(len(left_words | right_words), 1)
+    return max(ratio, jaccard)
 
 
 def titles_match(query: str, candidate: str | None, threshold: float = 0.82) -> bool:
     """Return whether a title result is close enough to trust."""
 
     return title_similarity(query, candidate) >= threshold
-
