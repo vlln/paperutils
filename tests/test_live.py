@@ -25,7 +25,16 @@ class LiveSmokeTests(unittest.TestCase):
         self.assertEqual(result.accession, "GSE100")
         self.assertTrue(result.title or result.status)
 
+    def test_resolve_arxiv(self):
+        result = resolve("arXiv:1901.01234", timeout=8)
+        self.assertTrue(result.arxiv_id.startswith("1901.01234"))
+        self.assertIn("arxiv", result.sources)
+
+    def test_search_cs(self):
+        results = search("attention is all you need", domain="cs", limit=1, timeout=8)
+        self.assertGreaterEqual(len(results), 1)
+        self.assertTrue(results[0].arxiv_id)
+
 
 if __name__ == "__main__":
     unittest.main()
-

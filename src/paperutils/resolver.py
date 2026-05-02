@@ -6,7 +6,7 @@ import concurrent.futures
 from typing import Iterable
 
 from paperutils.accessions import classify_accession, extract_accessions
-from paperutils.fetchers import FETCHERS, lookup_ena, lookup_ncbi, query_gwas_catalog, search_biomed
+from paperutils.fetchers import FETCHERS, lookup_ena, lookup_ncbi, query_gwas_catalog, search_biomed, search_cs
 from paperutils.identifiers import Identifier, infer_domain, parse_identifier
 from paperutils.models import Accession, LookupResult, PaperMetadata, SearchResult
 
@@ -76,6 +76,8 @@ def search(query: str, limit: int = 5, domain: str = "auto", timeout: float = 4.
     """Search papers by title or keyword."""
 
     selected_domain = "biomed" if domain == "auto" else domain
+    if selected_domain == "cs":
+        return search_cs(query, limit=limit, timeout=timeout)
     if selected_domain != "biomed":
         raise ValueError(f"search domain is not implemented yet: {selected_domain}")
     return search_biomed(query, limit=limit, timeout=timeout)
@@ -84,7 +86,7 @@ def search(query: str, limit: int = 5, domain: str = "auto", timeout: float = 4.
 def _merge_metadata(target: PaperMetadata, source: PaperMetadata) -> None:
     # Field precedence is encoded by only filling empty values, except Europe PMC's
     # data availability is authoritative and PubMed/Europe PMC abstracts may fill gaps.
-    for field_name in ("title", "journal", "year", "doi", "pmid", "pmcid"):
+    for field_name in ("title", "journal", "year", "doi", "arxiv_id", "pmid", "pmcid"):
         if not getattr(target, field_name) and getattr(source, field_name):
             setattr(target, field_name, getattr(source, field_name))
 

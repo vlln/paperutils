@@ -24,6 +24,7 @@ class PaperMetadata:
     journal: str | None = None
     year: str | None = None
     doi: str | None = None
+    arxiv_id: str | None = None
     pmid: str | None = None
     pmcid: str | None = None
     abstract: str | None = None
@@ -47,6 +48,7 @@ class SearchResult:
     year: str | None = None
     journal: str | None = None
     doi: str | None = None
+    arxiv_id: str | None = None
     pmid: str | None = None
     pmcid: str | None = None
     source: str | None = None
@@ -74,4 +76,3 @@ class LookupResult:
     status: str | None = None
     source: str | None = None
     extra: dict[str, str] = field(default_factory=dict)
-

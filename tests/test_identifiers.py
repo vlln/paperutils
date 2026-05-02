@@ -24,6 +24,11 @@ class IdentifierTests(unittest.TestCase):
         self.assertEqual(identifier.kind, "arxiv")
         self.assertEqual(infer_domain(identifier), "cs")
 
+    def test_parse_arxiv_url(self):
+        identifier = parse_identifier("https://arxiv.org/pdf/1901.01234v2.pdf")
+        self.assertEqual(identifier.kind, "arxiv")
+        self.assertEqual(identifier.value, "1901.01234v2")
+
     def test_title_fallback(self):
         identifier = parse_identifier("A spatially resolved brain atlas")
         self.assertEqual(identifier.kind, "title")
@@ -31,4 +36,3 @@ class IdentifierTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

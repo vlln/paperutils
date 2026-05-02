@@ -12,6 +12,7 @@ and uses only the Python standard library.
 ./paperutils accessions PMID:32939066
 ./paperutils lookup GSE100
 ./paperutils search "numpy array programming" --limit 3
+./paperutils resolve arXiv:1901.01234
 ```
 
 The source checkout runner adds `src/` to `sys.path`, so no installation step is
@@ -37,6 +38,7 @@ metadata.
 ./paperutils resolve 10.1038/s41586-020-2649-2
 ./paperutils resolve PMID:32939066 --json
 ./paperutils resolve https://pubmed.ncbi.nlm.nih.gov/32939066/ --full-abstract
+./paperutils resolve arXiv:1901.01234
 ```
 
 Biomedical resolution queries Crossref, Europe PMC, and PubMed E-utilities in
@@ -86,14 +88,20 @@ Search biomedical papers by title or keyword.
 
 Search currently uses Europe PMC first and Crossref as a fallback.
 
+For CS/arXiv search:
+
+```bash
+./paperutils search "attention is all you need" --domain cs --limit 3
+```
+
 ## Options
 
 Common behavior:
 
 - `--timeout SECONDS`: per-command API deadline, default `4.0`.
 - `--json`: JSON output for agent or script consumers.
-- `--domain auto|biomed|cs`: domain selector. `biomed` is implemented; `cs` is
-  reserved for future arXiv/Papers With Code support.
+- `--domain auto|biomed|cs`: domain selector. `biomed` uses biomedical sources;
+  `cs` uses arXiv.
 
 ## Tests
 
@@ -118,6 +126,7 @@ Implemented:
 
 - DOI, PMID, PMCID, URL, arXiv ID, and title-like identifier parsing.
 - Biomedical `resolve` via Crossref, Europe PMC, and PubMed.
+- CS/arXiv `resolve` and `search` via the arXiv Atom API.
 - Dataset accession extraction from data availability text.
 - GWAS Catalog study lookup by PMID.
 - ENA and NCBI accession lookup.
@@ -125,7 +134,6 @@ Implemented:
 
 Planned:
 
-- arXiv/CS fetcher implementation.
+- Papers With Code and GitHub enrichment for CS papers.
 - Better accession recall from Europe PMC cross references and full-text links.
 - Download support for PDFs.
-

@@ -121,10 +121,35 @@ class PubmedFetcher(Fetcher):
         return pmid
 
 
+class ArxivFetcher(Fetcher):
+    """Fetch arXiv metadata through the public Atom API."""
+
+    name = "arxiv"
+    api_url = "https://export.arxiv.org/api/query"
+    atom_ns = {"atom": "http://www.w3.org/2005/Atom"}
+    arxiv_ns = {"arxiv": "http://arxiv.org/schemas/atom"}
+
+    def can_fetch(self, identifier: Identifier) -> bool:
+        return identifier.kind in {"arxiv", "title"}
+
+    def fetch(self, identifier: Identifier, timeout: float) -> PaperMetadata:
+        params = {"max_results": 1}
+        if identifier.kind == "arxiv":
+            params["id_list"] = identifier.value
+        else:
+            params["search_query"] = f'ti:"{identifier.value}"'
+        xml_text = get_text(self.api_url, params=params, timeout=timeout)
+        entries = _arxiv_entries(xml_text)
+        if not entries:
+            raise FetchError("arXiv returned no results")
+        return _arxiv_entry_to_metadata(entries[0], self.name)
+
+
 BIOMED_FETCHERS: list[Fetcher] = [CrossrefFetcher(), EuropePMCFetcher(), PubmedFetcher()]
+CS_FETCHERS: list[Fetcher] = [ArxivFetcher()]
 FETCHERS: dict[str, list[Fetcher]] = {
     "biomed": BIOMED_FETCHERS,
-    "cs": [],
+    "cs": CS_FETCHERS,
 }
 
 
@@ -154,6 +179,23 @@ def search_biomed(query: str, limit: int, timeout: float) -> list[SearchResult]:
         timeout=timeout,
     )
     return [_crossref_work_to_search(item) for item in data.get("message", {}).get("items", [])[:limit]]
+
+
+def search_cs(query: str, limit: int, timeout: float) -> list[SearchResult]:
+    """Search arXiv papers by title or keyword."""
+
+    xml_text = get_text(
+        ArxivFetcher.api_url,
+        params={
+            "search_query": f"all:{query}",
+            "start": 0,
+            "max_results": max(1, limit),
+            "sortBy": "relevance",
+            "sortOrder": "descending",
+        },
+        timeout=timeout,
+    )
+    return [_arxiv_entry_to_search(entry) for entry in _arxiv_entries(xml_text)[:limit]]
 
 
 def query_gwas_catalog(paper: PaperMetadata, timeout: float) -> list[Accession]:
@@ -342,6 +384,51 @@ def _pubmed_xml_to_metadata(xml_text: str, source: str) -> PaperMetadata:
     return meta
 
 
+def _arxiv_entries(xml_text: str) -> list[ET.Element]:
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        raise FetchError("invalid arXiv Atom response") from exc
+    return root.findall("atom:entry", ArxivFetcher.atom_ns)
+
+
+def _arxiv_entry_to_metadata(entry: ET.Element, source: str) -> PaperMetadata:
+    meta = PaperMetadata()
+    meta.title = _normalize_space(_find_atom_text(entry, "title"))
+    meta.authors = [
+        _normalize_space(author.findtext("atom:name", namespaces=ArxivFetcher.atom_ns))
+        for author in entry.findall("atom:author", ArxivFetcher.atom_ns)
+    ]
+    meta.authors = [author for author in meta.authors if author]
+    meta.year = _year_from_date(_find_atom_text(entry, "published") or _find_atom_text(entry, "updated"))
+    meta.abstract = _normalize_space(_find_atom_text(entry, "summary"))
+    meta.arxiv_id = _arxiv_id_from_entry(entry)
+    doi = entry.findtext("arxiv:doi", namespaces=ArxivFetcher.arxiv_ns)
+    meta.doi = doi.lower() if doi else None
+    if meta.arxiv_id:
+        meta.full_text_links.append({"preprint": f"https://arxiv.org/pdf/{meta.arxiv_id}"})
+        meta.full_text_links.append({"arxiv": f"https://arxiv.org/abs/{meta.arxiv_id}"})
+    for link in entry.findall("atom:link", ArxivFetcher.atom_ns):
+        href = link.attrib.get("href")
+        title = link.attrib.get("title")
+        link_type = link.attrib.get("type")
+        if href and (title == "pdf" or link_type == "application/pdf"):
+            meta.full_text_links.append({"preprint": href})
+    meta.data_availability = "Not found"
+    meta.add_source(source)
+    return meta
+
+
+def _arxiv_entry_to_search(entry: ET.Element) -> SearchResult:
+    return SearchResult(
+        title=_normalize_space(_find_atom_text(entry, "title")) or "Untitled",
+        year=_year_from_date(_find_atom_text(entry, "published") or _find_atom_text(entry, "updated")),
+        doi=(entry.findtext("arxiv:doi", namespaces=ArxivFetcher.arxiv_ns) or "").lower() or None,
+        arxiv_id=_arxiv_id_from_entry(entry),
+        source="arxiv",
+    )
+
+
 def _europepmc_query(identifier: Identifier) -> str:
     if identifier.kind == "doi":
         return f'DOI:"{identifier.value}"'
@@ -446,3 +533,27 @@ def _sample_count(value: Any) -> str | None:
     if isinstance(value, str) and value:
         return value
     return None
+
+
+def _find_atom_text(entry: ET.Element, name: str) -> str | None:
+    return entry.findtext(f"atom:{name}", namespaces=ArxivFetcher.atom_ns)
+
+
+def _arxiv_id_from_entry(entry: ET.Element) -> str | None:
+    entry_id = _find_atom_text(entry, "id")
+    if not entry_id:
+        return None
+    value = entry_id.rstrip("/").rsplit("/", 1)[-1]
+    return value.replace(".pdf", "")
+
+
+def _year_from_date(value: str | None) -> str | None:
+    if value and len(value) >= 4 and value[:4].isdigit():
+        return value[:4]
+    return None
+
+
+def _normalize_space(value: str | None) -> str | None:
+    if not value:
+        return None
+    return " ".join(value.split())

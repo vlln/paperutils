@@ -22,6 +22,7 @@ def print_metadata(meta: PaperMetadata, *, as_json: bool = False, full_abstract:
         "journal",
         "year",
         "doi",
+        "arxiv_id",
         "pmid",
         "pmcid",
         "abstract",
@@ -67,11 +68,12 @@ def print_search(results: list[SearchResult], *, as_json: bool = False) -> None:
     if as_json:
         print(json.dumps([dataclasses.asdict(item) for item in results], ensure_ascii=False, indent=2))
         return
-    print(f"{'#':<3} {'year':<6} {'pmid':<10} {'doi':<32} title")
+    print(f"{'#':<3} {'year':<6} {'pmid':<10} {'doi/arxiv':<32} title")
     for index, item in enumerate(results, start=1):
+        identifier = item.doi or item.arxiv_id
         print(
             f"{index:<3} {_format_value(item.year):<6} "
-            f"{_format_value(item.pmid):<10} {_format_value(item.doi):<32} {item.title}"
+            f"{_format_value(item.pmid):<10} {_format_value(identifier):<32} {item.title}"
         )
 
 
@@ -86,6 +88,7 @@ def _metadata_dict(meta: PaperMetadata, *, full_abstract: bool) -> dict[str, Any
         "journal": meta.journal or "Not found",
         "year": meta.year or "Not found",
         "doi": meta.doi or "Not found",
+        "arxiv_id": meta.arxiv_id or "Not found",
         "pmid": meta.pmid or "Not found",
         "pmcid": meta.pmcid or "Not found",
         "abstract": abstract,
@@ -109,4 +112,3 @@ def _format_value(value: Any) -> str:
     if isinstance(value, list):
         return ", ".join(str(item) for item in value)
     return str(value)
-
