@@ -145,7 +145,46 @@ class ArxivFetcher(Fetcher):
         return _arxiv_entry_to_metadata(entries[0], self.name)
 
 
-BIOMED_FETCHERS: list[Fetcher] = [CrossrefFetcher(), EuropePMCFetcher(), PubmedFetcher()]
+class BioRxivFetcher(Fetcher):
+    """Fetch bioRxiv or medRxiv metadata through the official API."""
+
+    api_base_url = "https://api.biorxiv.org/details"
+
+    def __init__(self, server: str) -> None:
+        self.server = server
+        self.name = server
+        self.site_url = f"https://www.{server}.org"
+
+    def can_fetch(self, identifier: Identifier) -> bool:
+        if identifier.kind != "doi":
+            return False
+        if not identifier.value.startswith("10.1101/"):
+            return False
+        raw = identifier.raw.lower()
+        if "biorxiv.org" in raw:
+            return self.server == "biorxiv"
+        if "medrxiv.org" in raw:
+            return self.server == "medrxiv"
+        return True
+
+    def fetch(self, identifier: Identifier, timeout: float) -> PaperMetadata:
+        data = get_json(
+            f"{self.api_base_url}/{self.server}/{identifier.value}",
+            timeout=timeout,
+        )
+        collection = data.get("collection", [])
+        if not collection:
+            raise FetchError(f"{self.server} returned no results")
+        return _biorxiv_item_to_metadata(_latest_biorxiv_item(collection), self.server)
+
+
+BIOMED_FETCHERS: list[Fetcher] = [
+    BioRxivFetcher("biorxiv"),
+    BioRxivFetcher("medrxiv"),
+    CrossrefFetcher(),
+    EuropePMCFetcher(),
+    PubmedFetcher(),
+]
 CS_FETCHERS: list[Fetcher] = [ArxivFetcher()]
 FETCHERS: dict[str, list[Fetcher]] = {
     "biomed": BIOMED_FETCHERS,
@@ -429,6 +468,36 @@ def _arxiv_entry_to_search(entry: ET.Element) -> SearchResult:
     )
 
 
+def _latest_biorxiv_item(items: list[dict[str, Any]]) -> dict[str, Any]:
+    return max(items, key=lambda item: _version_number(item.get("version")))
+
+
+def _biorxiv_item_to_metadata(item: dict[str, Any], server: str) -> PaperMetadata:
+    meta = PaperMetadata()
+    meta.title = item.get("title")
+    meta.authors = _split_preprint_authors(item.get("authors"))
+    meta.journal = server
+    meta.year = _year_from_date(item.get("date"))
+    meta.doi = (item.get("doi") or "").lower() or None
+    meta.preprint_server = server
+    meta.preprint_version = str(item.get("version")) if item.get("version") else None
+    meta.abstract = item.get("abstract")
+    meta.data_availability = "Not found"
+    if meta.doi:
+        version_suffix = f"v{meta.preprint_version}" if meta.preprint_version else ""
+        meta.full_text_links.append({"preprint": f"https://www.{server}.org/content/{meta.doi}{version_suffix}.full.pdf"})
+        meta.full_text_links.append({"preprint": f"https://www.{server}.org/content/{meta.doi}{version_suffix}"})
+    if item.get("jatsxml"):
+        meta.full_text_links.append({"jatsxml": item["jatsxml"]})
+    meta.raw = {
+        "category": str(item.get("category") or ""),
+        "license": str(item.get("license") or ""),
+        "type": str(item.get("type") or ""),
+    }
+    meta.add_source(server)
+    return meta
+
+
 def _europepmc_query(identifier: Identifier) -> str:
     if identifier.kind == "doi":
         return f'DOI:"{identifier.value}"'
@@ -557,3 +626,16 @@ def _normalize_space(value: str | None) -> str | None:
     if not value:
         return None
     return " ".join(value.split())
+
+
+def _split_preprint_authors(author_string: str | None) -> list[str]:
+    if not author_string:
+        return []
+    return [part.strip() for part in author_string.split(";") if part.strip()]
+
+
+def _version_number(value: Any) -> int:
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return 0

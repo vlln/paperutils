@@ -29,6 +29,11 @@ class IdentifierTests(unittest.TestCase):
         self.assertEqual(identifier.kind, "arxiv")
         self.assertEqual(identifier.value, "1901.01234v2")
 
+    def test_parse_biorxiv_pdf_url(self):
+        identifier = parse_identifier("https://www.biorxiv.org/content/10.1101/2019.12.31.892091v1.full.pdf")
+        self.assertEqual(identifier.kind, "doi")
+        self.assertEqual(identifier.value, "10.1101/2019.12.31.892091")
+
     def test_title_fallback(self):
         identifier = parse_identifier("A spatially resolved brain atlas")
         self.assertEqual(identifier.kind, "title")

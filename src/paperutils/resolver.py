@@ -86,7 +86,17 @@ def search(query: str, limit: int = 5, domain: str = "auto", timeout: float = 4.
 def _merge_metadata(target: PaperMetadata, source: PaperMetadata) -> None:
     # Field precedence is encoded by only filling empty values, except Europe PMC's
     # data availability is authoritative and PubMed/Europe PMC abstracts may fill gaps.
-    for field_name in ("title", "journal", "year", "doi", "arxiv_id", "pmid", "pmcid"):
+    for field_name in (
+        "title",
+        "journal",
+        "year",
+        "doi",
+        "arxiv_id",
+        "preprint_server",
+        "preprint_version",
+        "pmid",
+        "pmcid",
+    ):
         if not getattr(target, field_name) and getattr(source, field_name):
             setattr(target, field_name, getattr(source, field_name))
 

@@ -13,6 +13,7 @@ and uses only the Python standard library.
 ./paperutils lookup GSE100
 ./paperutils search "numpy array programming" --limit 3
 ./paperutils resolve arXiv:1901.01234
+./paperutils resolve 10.1101/2019.12.31.892091
 ```
 
 The source checkout runner adds `src/` to `sys.path`, so no installation step is
@@ -39,11 +40,16 @@ metadata.
 ./paperutils resolve PMID:32939066 --json
 ./paperutils resolve https://pubmed.ncbi.nlm.nih.gov/32939066/ --full-abstract
 ./paperutils resolve arXiv:1901.01234
+./paperutils resolve https://www.biorxiv.org/content/10.1101/2019.12.31.892091v1.full.pdf
 ```
 
 Biomedical resolution queries Crossref, Europe PMC, and PubMed E-utilities in
 parallel. Any source may fail or time out independently. The command prints the
 best merged result from sources that returned in time.
+
+bioRxiv and medRxiv DOI/URL resolution also queries the official bioRxiv API.
+When a version is available, `full_text_links` includes versioned preprint PDF
+and landing page links.
 
 Important field choices:
 
@@ -127,6 +133,7 @@ Implemented:
 - DOI, PMID, PMCID, URL, arXiv ID, and title-like identifier parsing.
 - Biomedical `resolve` via Crossref, Europe PMC, and PubMed.
 - CS/arXiv `resolve` and `search` via the arXiv Atom API.
+- bioRxiv and medRxiv DOI/URL `resolve` via the official bioRxiv API.
 - Dataset accession extraction from data availability text.
 - GWAS Catalog study lookup by PMID.
 - ENA and NCBI accession lookup.
@@ -135,5 +142,6 @@ Implemented:
 Planned:
 
 - Papers With Code and GitHub enrichment for CS papers.
+- bioRxiv/medRxiv search beyond Europe PMC fallback.
 - Better accession recall from Europe PMC cross references and full-text links.
 - Download support for PDFs.

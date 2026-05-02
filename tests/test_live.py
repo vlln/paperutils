@@ -30,6 +30,18 @@ class LiveSmokeTests(unittest.TestCase):
         self.assertTrue(result.arxiv_id.startswith("1901.01234"))
         self.assertIn("arxiv", result.sources)
 
+    def test_resolve_biorxiv(self):
+        result = resolve("10.1101/2019.12.31.892091", timeout=8)
+        self.assertEqual(result.doi, "10.1101/2019.12.31.892091")
+        self.assertEqual(result.preprint_server, "biorxiv")
+        self.assertIn("biorxiv", result.sources)
+
+    def test_resolve_medrxiv(self):
+        result = resolve("10.1101/2020.09.09.20191205", timeout=8)
+        self.assertEqual(result.doi, "10.1101/2020.09.09.20191205")
+        self.assertEqual(result.preprint_server, "medrxiv")
+        self.assertIn("medrxiv", result.sources)
+
     def test_search_cs(self):
         results = search("attention is all you need", domain="cs", limit=1, timeout=8)
         self.assertGreaterEqual(len(results), 1)

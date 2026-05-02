@@ -96,5 +96,7 @@ def _parse_url(url: str) -> Identifier:
 
 
 def _clean_doi(value: str) -> str:
-    return value.rstrip(".,;)").lower()
-
+    cleaned = value.rstrip(".,;)").lower()
+    if cleaned.startswith("10.1101/"):
+        cleaned = re.sub(r"v\d+(?:\.full)?(?:\.pdf)?$", "", cleaned)
+    return cleaned

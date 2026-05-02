@@ -25,6 +25,8 @@ class PaperMetadata:
     year: str | None = None
     doi: str | None = None
     arxiv_id: str | None = None
+    preprint_server: str | None = None
+    preprint_version: str | None = None
     pmid: str | None = None
     pmcid: str | None = None
     abstract: str | None = None
