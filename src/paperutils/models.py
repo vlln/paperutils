@@ -33,6 +33,8 @@ class PaperMetadata:
     data_availability: str | None = None
     full_text_links: list[dict[str, str]] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)
+    match_type: str | None = None
+    confidence: int = 0
     raw: dict[str, Any] = field(default_factory=dict)
 
     def add_source(self, source: str) -> None:

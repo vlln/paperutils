@@ -14,6 +14,7 @@ from typing import Any
 
 from paperutils.http import FetchError, get_json, get_text
 from paperutils.identifiers import Identifier
+from paperutils.matching import titles_match
 from paperutils.models import Accession, LookupResult, PaperMetadata, SearchResult
 
 
@@ -44,7 +45,9 @@ class CrossrefFetcher(Fetcher):
         if identifier.kind == "doi":
             url = f"{self.base_url}/{identifier.value}"
             message = get_json(url, timeout=timeout).get("message", {})
-            return _crossref_work_to_metadata(message, self.name)
+            meta = _crossref_work_to_metadata(message, self.name)
+            _mark_match(meta, identifier)
+            return meta
 
         data = get_json(
             self.base_url,
@@ -54,7 +57,10 @@ class CrossrefFetcher(Fetcher):
         items = data.get("message", {}).get("items", [])
         if not items:
             raise FetchError("Crossref returned no results")
-        return _crossref_work_to_metadata(items[0], self.name)
+        meta = _crossref_work_to_metadata(items[0], self.name)
+        _mark_match(meta, identifier)
+        _require_title_match(identifier, meta)
+        return meta
 
 
 class EuropePMCFetcher(Fetcher):
@@ -81,7 +87,10 @@ class EuropePMCFetcher(Fetcher):
         results = data.get("resultList", {}).get("result", [])
         if not results:
             raise FetchError("Europe PMC returned no results")
-        return _europepmc_result_to_metadata(results[0], self.name)
+        meta = _europepmc_result_to_metadata(results[0], self.name)
+        _mark_match(meta, identifier)
+        _require_title_match(identifier, meta)
+        return meta
 
 
 class PubmedFetcher(Fetcher):
@@ -101,7 +110,10 @@ class PubmedFetcher(Fetcher):
             params={"db": "pubmed", "id": pmid, "retmode": "xml"},
             timeout=timeout,
         )
-        return _pubmed_xml_to_metadata(xml_text, self.name)
+        meta = _pubmed_xml_to_metadata(xml_text, self.name)
+        _mark_match(meta, identifier)
+        _require_title_match(identifier, meta)
+        return meta
 
     def _search_pmid(self, identifier: Identifier, timeout: float) -> str:
         term = {
@@ -142,7 +154,10 @@ class ArxivFetcher(Fetcher):
         entries = _arxiv_entries(xml_text)
         if not entries:
             raise FetchError("arXiv returned no results")
-        return _arxiv_entry_to_metadata(entries[0], self.name)
+        meta = _arxiv_entry_to_metadata(entries[0], self.name)
+        _mark_match(meta, identifier)
+        _require_title_match(identifier, meta)
+        return meta
 
 
 class BioRxivFetcher(Fetcher):
@@ -175,7 +190,9 @@ class BioRxivFetcher(Fetcher):
         collection = data.get("collection", [])
         if not collection:
             raise FetchError(f"{self.server} returned no results")
-        return _biorxiv_item_to_metadata(_latest_biorxiv_item(collection), self.server)
+        meta = _biorxiv_item_to_metadata(_latest_biorxiv_item(collection), self.server)
+        _mark_match(meta, identifier)
+        return meta
 
 
 BIOMED_FETCHERS: list[Fetcher] = [
@@ -602,6 +619,33 @@ def _sample_count(value: Any) -> str | None:
     if isinstance(value, str) and value:
         return value
     return None
+
+
+def _mark_match(meta: PaperMetadata, identifier: Identifier) -> None:
+    if identifier.kind == "title":
+        meta.match_type = "title"
+        meta.confidence = _title_confidence(meta)
+    elif identifier.kind in {"doi", "pmid", "pmcid", "arxiv"}:
+        meta.match_type = identifier.kind
+        meta.confidence = 100
+    else:
+        meta.match_type = identifier.kind
+        meta.confidence = 60
+
+
+def _require_title_match(identifier: Identifier, meta: PaperMetadata) -> None:
+    if identifier.kind == "title" and not titles_match(identifier.value, meta.title):
+        raise FetchError("title candidate did not match query closely enough")
+
+
+def _title_confidence(meta: PaperMetadata) -> int:
+    if "europepmc" in meta.sources:
+        return 70
+    if "pubmed" in meta.sources:
+        return 65
+    if "arxiv" in meta.sources:
+        return 60
+    return 40
 
 
 def _find_atom_text(entry: ET.Element, name: str) -> str | None:

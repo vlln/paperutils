@@ -6,7 +6,15 @@ import concurrent.futures
 from typing import Iterable
 
 from paperutils.accessions import classify_accession, extract_accessions
-from paperutils.fetchers import FETCHERS, lookup_ena, lookup_ncbi, query_gwas_catalog, search_biomed, search_cs
+from paperutils.fetchers import (
+    FETCHERS,
+    CrossrefFetcher,
+    lookup_ena,
+    lookup_ncbi,
+    query_gwas_catalog,
+    search_biomed,
+    search_cs,
+)
 from paperutils.identifiers import Identifier, infer_domain, parse_identifier
 from paperutils.models import Accession, LookupResult, PaperMetadata, SearchResult
 
@@ -41,6 +49,8 @@ def resolve(identifier_text: str, domain: str = "auto", timeout: float = 4.0) ->
 
     if not merged.sources:
         raise RuntimeError("no metadata sources returned a usable result")
+    if identifier.kind == "title":
+        _enrich_title_resolution_with_canonical_doi(merged, timeout)
     if not merged.data_availability:
         merged.data_availability = "Not found"
     merged.full_text_links = _dedupe_links(merged.full_text_links)
@@ -97,13 +107,17 @@ def _merge_metadata(target: PaperMetadata, source: PaperMetadata) -> None:
         "pmid",
         "pmcid",
     ):
-        if not getattr(target, field_name) and getattr(source, field_name):
+        if _should_replace_field(target, source, field_name):
             setattr(target, field_name, getattr(source, field_name))
 
-    if not target.authors and source.authors:
+    if source.authors and (not target.authors or _is_higher_confidence(source, target)):
         target.authors = source.authors
 
-    if source.abstract and (not target.abstract or "europepmc" in source.sources):
+    if source.abstract and (
+        not target.abstract
+        or "europepmc" in source.sources
+        or _is_higher_confidence(source, target)
+    ):
         target.abstract = source.abstract
 
     if "europepmc" in source.sources and source.data_availability:
@@ -112,6 +126,37 @@ def _merge_metadata(target: PaperMetadata, source: PaperMetadata) -> None:
     target.full_text_links.extend(source.full_text_links)
     for source_name in source.sources:
         target.add_source(source_name)
+    if source.confidence > target.confidence:
+        target.confidence = source.confidence
+        target.match_type = source.match_type
+
+
+def _enrich_title_resolution_with_canonical_doi(meta: PaperMetadata, timeout: float) -> None:
+    if not meta.doi:
+        return
+    try:
+        canonical = CrossrefFetcher().fetch(Identifier("doi", meta.doi, meta.doi), timeout)
+    except Exception:
+        return
+    _merge_metadata(meta, canonical)
+
+
+def _should_replace_field(target: PaperMetadata, source: PaperMetadata, field_name: str) -> bool:
+    source_value = getattr(source, field_name)
+    if not source_value:
+        return False
+    target_value = getattr(target, field_name)
+    if not target_value:
+        return True
+    if field_name in {"doi", "pmid", "pmcid", "arxiv_id"}:
+        return _is_higher_confidence(source, target)
+    if field_name in {"title", "journal", "year", "preprint_server", "preprint_version"}:
+        return _is_higher_confidence(source, target)
+    return False
+
+
+def _is_higher_confidence(source: PaperMetadata, target: PaperMetadata) -> bool:
+    return source.confidence > target.confidence
 
 
 def _dedupe_links(links: Iterable[dict[str, str]]) -> list[dict[str, str]]:
