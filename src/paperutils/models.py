@@ -80,3 +80,32 @@ class LookupResult:
     status: str | None = None
     source: str | None = None
     extra: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class DatasetRecord:
+    """Dataset entry inside a paper record."""
+
+    accession: str
+    type: str
+    description: str = ""
+    title: str | None = None
+    organism: str | None = None
+    samples: str | None = None
+    status: str | None = None
+    submitted: str | None = None
+    source: str | None = None
+
+
+@dataclass
+class PaperRecord:
+    """One-stop paper dossier returned by ``paperutils get``."""
+
+    identity: PaperMetadata
+    abstract: str | None = None
+    data_availability: str | None = None
+    supplement: dict[str, Any] = field(default_factory=dict)
+    code_repos: list[dict[str, Any]] = field(default_factory=list)
+    datasets: list[DatasetRecord] = field(default_factory=list)
+    full_text_links: list[dict[str, str]] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)

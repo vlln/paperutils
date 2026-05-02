@@ -6,8 +6,8 @@ import argparse
 import sys
 
 from paperutils import __version__
-from paperutils.output import print_accessions, print_lookup, print_metadata, print_search
-from paperutils.resolver import accessions, lookup, resolve, search
+from paperutils.output import print_explanation, print_find_results, print_paper_record
+from paperutils.resolver import explain_accession, find_papers, get_paper
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,31 +17,31 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"paperutils {__version__}")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    resolve_parser = subparsers.add_parser("resolve", help="resolve paper metadata")
-    resolve_parser.add_argument("identifier")
-    resolve_parser.add_argument("--json", action="store_true", help="output JSON")
-    resolve_parser.add_argument("--full-abstract", action="store_true", help="do not truncate abstract")
-    resolve_parser.add_argument("--domain", choices=("auto", "biomed", "cs"), default="auto")
-    resolve_parser.add_argument("--timeout", type=float, default=4.0, help="API timeout in seconds")
+    get_parser = subparsers.add_parser("get", help="get a complete paper dossier")
+    get_parser.add_argument("identifier")
+    get_parser.add_argument("--depth", choices=("fast", "full"), default="full")
+    get_parser.add_argument("--json", action="store_true", help="output JSON")
+    get_parser.add_argument("--yaml", action="store_true", help="output YAML-like text")
+    get_parser.add_argument("--full-abstract", action="store_true", help="do not truncate abstract")
+    get_parser.add_argument("--domain", choices=("auto", "biomed", "cs"), default="auto")
+    get_parser.add_argument("--timeout", type=float, default=4.0, help="API timeout in seconds")
 
-    accessions_parser = subparsers.add_parser("accessions", help="list related dataset accessions")
-    accessions_parser.add_argument("identifier")
-    accessions_parser.add_argument("--json", action="store_true", help="output JSON")
-    accessions_parser.add_argument("--domain", choices=("auto", "biomed", "cs"), default="auto")
-    accessions_parser.add_argument("--timeout", type=float, default=4.0, help="API timeout in seconds")
+    find_parser = subparsers.add_parser("find", help="find paper candidates")
+    find_parser.add_argument("query")
+    find_parser.add_argument("--limit", type=int, default=5)
+    find_parser.add_argument("--json", action="store_true", help="output JSON")
+    find_parser.add_argument("--domain", choices=("auto", "biomed", "cs", "physics"), default="auto")
+    find_parser.add_argument("--timeout", type=float, default=4.0, help="API timeout in seconds")
 
-    lookup_parser = subparsers.add_parser("lookup", help="lookup an accession")
-    lookup_parser.add_argument("accession")
-    lookup_parser.add_argument("--json", action="store_true", help="output JSON")
-    lookup_parser.add_argument("--db", choices=("auto", "geo", "ena", "sra", "bioproject", "assembly"), default="auto")
-    lookup_parser.add_argument("--timeout", type=float, default=4.0, help="API timeout in seconds")
-
-    search_parser = subparsers.add_parser("search", help="search papers")
-    search_parser.add_argument("query")
-    search_parser.add_argument("--limit", type=int, default=5)
-    search_parser.add_argument("--json", action="store_true", help="output JSON")
-    search_parser.add_argument("--domain", choices=("auto", "biomed", "cs"), default="auto")
-    search_parser.add_argument("--timeout", type=float, default=4.0, help="API timeout in seconds")
+    explain_parser = subparsers.add_parser("explain", help="explain a dataset accession")
+    explain_parser.add_argument("accession")
+    explain_parser.add_argument("--json", action="store_true", help="output JSON")
+    explain_parser.add_argument(
+        "--db",
+        choices=("auto", "geo", "ena", "sra", "bioproject", "assembly"),
+        default="auto",
+    )
+    explain_parser.add_argument("--timeout", type=float, default=4.0, help="API timeout in seconds")
 
     return parser
 
@@ -52,18 +52,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
-        if args.command == "resolve":
-            result = resolve(args.identifier, domain=args.domain, timeout=args.timeout)
-            print_metadata(result, as_json=args.json, full_abstract=args.full_abstract)
-        elif args.command == "accessions":
-            result = accessions(args.identifier, domain=args.domain, timeout=args.timeout)
-            print_accessions(result, as_json=args.json)
-        elif args.command == "lookup":
-            result = lookup(args.accession, db=args.db, timeout=args.timeout)
-            print_lookup(result, as_json=args.json)
-        elif args.command == "search":
-            result = search(args.query, limit=args.limit, domain=args.domain, timeout=args.timeout)
-            print_search(result, as_json=args.json)
+        if args.command == "get":
+            result = get_paper(
+                args.identifier,
+                depth=args.depth,
+                domain=args.domain,
+                timeout=args.timeout,
+            )
+            print_paper_record(result, as_json=args.json, full_abstract=args.full_abstract)
+        elif args.command == "find":
+            result = find_papers(args.query, limit=args.limit, domain=args.domain, timeout=args.timeout)
+            print_find_results(result, as_json=args.json)
+        elif args.command == "explain":
+            result = explain_accession(args.accession, db=args.db, timeout=args.timeout)
+            print_explanation(result, as_json=args.json)
         else:
             parser.error(f"unknown command: {args.command}")
     except Exception as exc:

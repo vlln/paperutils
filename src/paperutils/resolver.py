@@ -16,7 +16,7 @@ from paperutils.fetchers import (
     search_cs,
 )
 from paperutils.identifiers import Identifier, infer_domain, parse_identifier
-from paperutils.models import Accession, LookupResult, PaperMetadata, SearchResult
+from paperutils.models import Accession, DatasetRecord, LookupResult, PaperMetadata, PaperRecord, SearchResult
 
 
 def resolve(identifier_text: str, domain: str = "auto", timeout: float = 4.0) -> PaperMetadata:
@@ -66,6 +66,33 @@ def accessions(identifier_text: str, domain: str = "auto", timeout: float = 4.0)
     return _dedupe_accessions(found)
 
 
+def get_paper(
+    identifier_text: str,
+    depth: str = "full",
+    domain: str = "auto",
+    timeout: float = 4.0,
+) -> PaperRecord:
+    """Build a one-stop paper dossier."""
+
+    paper = resolve(identifier_text, domain=domain, timeout=timeout)
+    extracted = extract_accessions(paper.data_availability)
+    if depth == "full":
+        extracted = _dedupe_accessions([*extracted, *query_gwas_catalog(paper, timeout=timeout)])
+    else:
+        extracted = _dedupe_accessions(extracted)
+    datasets = _dataset_records(extracted, verify=depth == "full", timeout=timeout)
+    return PaperRecord(
+        identity=paper,
+        abstract=paper.abstract,
+        data_availability=paper.data_availability,
+        supplement=_supplement_from_links(paper.full_text_links),
+        code_repos=[],
+        datasets=datasets,
+        full_text_links=paper.full_text_links,
+        sources=paper.sources,
+    )
+
+
 def lookup(accession: str, db: str = "auto", timeout: float = 4.0) -> LookupResult:
     """Lookup one accession in ENA or NCBI."""
 
@@ -82,6 +109,12 @@ def lookup(accession: str, db: str = "auto", timeout: float = 4.0) -> LookupResu
     return LookupResult(accession=clean, type=kind, status="Not found")
 
 
+def explain_accession(accession: str, db: str = "auto", timeout: float = 4.0) -> LookupResult:
+    """Explain one dataset/accession identifier."""
+
+    return lookup(accession, db=db, timeout=timeout)
+
+
 def search(query: str, limit: int = 5, domain: str = "auto", timeout: float = 4.0) -> list[SearchResult]:
     """Search papers by title or keyword."""
 
@@ -91,6 +124,12 @@ def search(query: str, limit: int = 5, domain: str = "auto", timeout: float = 4.
     if selected_domain != "biomed":
         raise ValueError(f"search domain is not implemented yet: {selected_domain}")
     return search_biomed(query, limit=limit, timeout=timeout)
+
+
+def find_papers(query: str, limit: int = 5, domain: str = "auto", timeout: float = 4.0) -> list[SearchResult]:
+    """Find candidate papers."""
+
+    return search(query, limit=limit, domain=domain, timeout=timeout)
 
 
 def _merge_metadata(target: PaperMetadata, source: PaperMetadata) -> None:
@@ -182,6 +221,40 @@ def _dedupe_accessions(items: Iterable[Accession]) -> list[Accession]:
             unique.append(item)
             seen.add(marker)
     return unique
+
+
+def _dataset_records(items: Iterable[Accession], verify: bool, timeout: float) -> list[DatasetRecord]:
+    records = []
+    for item in items:
+        record = DatasetRecord(
+            accession=item.accession,
+            type=item.type,
+            description=item.description,
+        )
+        if verify:
+            detail = explain_accession(item.accession, timeout=timeout)
+            record.title = detail.title
+            record.organism = detail.organism
+            record.samples = detail.samples
+            record.status = detail.status
+            record.submitted = detail.submitted
+            record.source = detail.source
+        records.append(record)
+    return records
+
+
+def _supplement_from_links(links: list[dict[str, str]]) -> dict[str, object]:
+    pdf = None
+    files = []
+    for link in links:
+        if not link:
+            continue
+        link_type, url = next(iter(link.items()))
+        if pdf is None and (link_type in {"publisher", "preprint", "pmc"} or url.endswith(".pdf")):
+            pdf = url
+        if "supp" in url.lower() or "jatsxml" in link_type:
+            files.append(url)
+    return {"pdf": pdf or "Not found", "files": files}
 
 
 def _lookup_candidates(kind: str, requested_db: str) -> list[str]:
