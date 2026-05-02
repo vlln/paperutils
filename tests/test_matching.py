@@ -1,6 +1,9 @@
 import unittest
 
+from paperutils.fetchers import _first_matching_title_candidate
+from paperutils.identifiers import Identifier
 from paperutils.matching import title_similarity, titles_match
+from paperutils.models import PaperMetadata
 
 
 class MatchingTests(unittest.TestCase):
@@ -38,6 +41,33 @@ class MatchingTests(unittest.TestCase):
                 "The exposome and the human oral microbiome through the one health lens",
             )
         )
+
+    def test_titles_reject_unrequested_author_correction(self):
+        self.assertFalse(
+            titles_match(
+                "Effect of host genetics on the gut microbiome in 7,738 participants of the Dutch Microbiome Project",
+                "Author Correction: Effect of host genetics on the gut microbiome in 7,738 participants of the Dutch Microbiome Project.",
+            )
+        )
+
+    def test_first_matching_title_candidate_skips_author_correction(self):
+        identifier = Identifier(
+            "title",
+            "Effect of host genetics on the gut microbiome in 7,738 participants of the Dutch Microbiome Project",
+            "Effect of host genetics on the gut microbiome in 7,738 participants of the Dutch Microbiome Project",
+        )
+        correction = PaperMetadata(
+            title="Author Correction: Effect of host genetics on the gut microbiome in 7,738 participants of the Dutch Microbiome Project.",
+            doi="10.1038/s41588-022-01164-2",
+        )
+        original = PaperMetadata(
+            title="Effect of host genetics on the gut microbiome in 7,738 participants of the Dutch Microbiome Project.",
+            doi="10.1038/s41588-021-00992-y",
+        )
+
+        match = _first_matching_title_candidate(identifier, [correction, original], "test")
+
+        self.assertEqual(match.doi, "10.1038/s41588-021-00992-y")
 
 
 if __name__ == "__main__":

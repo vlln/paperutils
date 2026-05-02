@@ -7,6 +7,13 @@ from difflib import SequenceMatcher
 
 
 STOPWORDS = {"a", "an", "and", "for", "in", "of", "on", "the", "to", "with"}
+PUBLICATION_PREFIXES = (
+    "author correction",
+    "correction",
+    "erratum",
+    "corrigendum",
+    "retraction",
+)
 
 
 def normalize_title(title: str | None) -> str:
@@ -39,4 +46,18 @@ def title_similarity(query: str, candidate: str | None) -> float:
 def titles_match(query: str, candidate: str | None, threshold: float = 0.82) -> bool:
     """Return whether a title result is close enough to trust."""
 
+    if _has_unrequested_publication_prefix(query, candidate):
+        return False
     return title_similarity(query, candidate) >= threshold
+
+
+def _has_unrequested_publication_prefix(query: str, candidate: str | None) -> bool:
+    if not candidate:
+        return False
+    query_text = (query or "").strip().lower()
+    candidate_text = candidate.strip().lower()
+    for prefix in PUBLICATION_PREFIXES:
+        marker = f"{prefix}:"
+        if candidate_text.startswith(marker) and not query_text.startswith(marker):
+            return True
+    return False

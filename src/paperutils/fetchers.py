@@ -10,7 +10,7 @@ import html
 import re
 import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Iterable
 
 from paperutils.http import FetchError, get_json, get_text
 from paperutils.identifiers import Identifier
@@ -51,16 +51,17 @@ class CrossrefFetcher(Fetcher):
 
         data = get_json(
             self.base_url,
-            params={"query.title": identifier.value, "rows": 1},
+            params={"query.title": identifier.value, "rows": 5},
             timeout=timeout,
         )
         items = data.get("message", {}).get("items", [])
         if not items:
             raise FetchError("Crossref returned no results")
-        meta = _crossref_work_to_metadata(items[0], self.name)
-        _mark_match(meta, identifier)
-        _require_title_match(identifier, meta)
-        return meta
+        return _first_matching_title_candidate(
+            identifier,
+            (_crossref_work_to_metadata(item, self.name) for item in items),
+            "Crossref",
+        )
 
 
 class EuropePMCFetcher(Fetcher):
@@ -79,7 +80,7 @@ class EuropePMCFetcher(Fetcher):
             params={
                 "query": query,
                 "format": "json",
-                "pageSize": 1,
+                "pageSize": 5,
                 "resultType": "core",
             },
             timeout=timeout,
@@ -87,9 +88,11 @@ class EuropePMCFetcher(Fetcher):
         results = data.get("resultList", {}).get("result", [])
         if not results:
             raise FetchError("Europe PMC returned no results")
-        meta = _europepmc_result_to_metadata(results[0], self.name)
-        _mark_match(meta, identifier)
-        _require_title_match(identifier, meta)
+        meta = _first_matching_title_candidate(
+            identifier,
+            (_europepmc_result_to_metadata(result, self.name) for result in results),
+            "Europe PMC",
+        )
         if not meta.data_availability and meta.pmcid:
             meta.data_availability = _fetch_pmc_availability_text(meta.pmcid, timeout)
         return meta
@@ -125,14 +128,29 @@ class PubmedFetcher(Fetcher):
         }.get(identifier.kind, identifier.value)
         xml_text = get_text(
             self.esearch_url,
-            params={"db": "pubmed", "term": term, "retmode": "xml", "retmax": 1},
+            params={"db": "pubmed", "term": term, "retmode": "xml", "retmax": 5},
             timeout=timeout,
         )
         root = ET.fromstring(xml_text)
-        pmid = root.findtext(".//Id")
+        pmids = [node.text for node in root.findall(".//Id") if node.text]
+        if identifier.kind == "title":
+            return self._first_matching_pmid(identifier, pmids, timeout)
+        pmid = pmids[0] if pmids else None
         if not pmid:
             raise FetchError("PubMed returned no PMID")
         return pmid
+
+    def _first_matching_pmid(self, identifier: Identifier, pmids: list[str], timeout: float) -> str:
+        for pmid in pmids:
+            xml_text = get_text(
+                self.efetch_url,
+                params={"db": "pubmed", "id": pmid, "retmode": "xml"},
+                timeout=timeout,
+            )
+            meta = _pubmed_xml_to_metadata(xml_text, self.name)
+            if titles_match(identifier.value, meta.title):
+                return pmid
+        raise FetchError("PubMed returned no matching PMID")
 
 
 class ArxivFetcher(Fetcher):
@@ -806,6 +824,18 @@ def _mark_match(meta: PaperMetadata, identifier: Identifier) -> None:
 def _require_title_match(identifier: Identifier, meta: PaperMetadata) -> None:
     if identifier.kind == "title" and not titles_match(identifier.value, meta.title):
         raise FetchError("title candidate did not match query closely enough")
+
+
+def _first_matching_title_candidate(
+    identifier: Identifier,
+    candidates: Iterable[PaperMetadata],
+    source_name: str,
+) -> PaperMetadata:
+    for meta in candidates:
+        _mark_match(meta, identifier)
+        if identifier.kind != "title" or titles_match(identifier.value, meta.title):
+            return meta
+    raise FetchError(f"{source_name} returned no matching title candidates")
 
 
 def _title_confidence(meta: PaperMetadata) -> int:
