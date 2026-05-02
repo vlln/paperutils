@@ -2,7 +2,8 @@ import unittest
 from unittest import mock
 
 from paperutils.models import PaperMetadata
-from paperutils.resolver import _enrich_title_resolution_with_canonical_doi, _merge_metadata
+from paperutils.resolver import _dataset_records, _enrich_title_resolution_with_canonical_doi, _merge_metadata
+from paperutils.models import Accession
 
 
 class ResolverTests(unittest.TestCase):
@@ -105,6 +106,22 @@ class ResolverTests(unittest.TestCase):
             merged.full_text_links,
         )
         fetcher_class.return_value.fetch.assert_called_once()
+
+    def test_dataset_records_do_not_verify_url_resources(self):
+        records = _dataset_records(
+            [
+                Accession("Zenodo", "https://zenodo.org/records/123456", "Processed data"),
+                Accession("Figshare", "10.6084/m9.figshare.123456.v1", "Processed data"),
+            ],
+            verify=True,
+            timeout=4,
+        )
+
+        self.assertEqual(records[0].type, "Zenodo")
+        self.assertEqual(records[0].url, "https://zenodo.org/records/123456")
+        self.assertEqual(records[0].download, "https://zenodo.org/records/123456")
+        self.assertEqual(records[1].url, "https://doi.org/10.6084/m9.figshare.123456.v1")
+        self.assertEqual(records[1].download, "https://doi.org/10.6084/m9.figshare.123456.v1")
 
 
 if __name__ == "__main__":

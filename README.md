@@ -160,6 +160,7 @@ Implemented:
 - CS/arXiv metadata and search via the arXiv Atom API.
 - Supplementary file classification from Crossref and Europe PMC links.
 - Dataset accession extraction from data availability text.
+- GitHub, Zenodo, Figshare, Dryad, and OSF extraction from data availability text.
 - GWAS Catalog lookup by PMID during `get --depth full`.
 - ENA and NCBI accession explanation.
 - Text and JSON output.

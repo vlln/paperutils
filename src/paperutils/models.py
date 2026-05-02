@@ -95,6 +95,8 @@ class DatasetRecord:
     status: str | None = None
     submitted: str | None = None
     source: str | None = None
+    url: str | None = None
+    download: str | None = None
 
 
 @dataclass

@@ -5,7 +5,7 @@ from __future__ import annotations
 import concurrent.futures
 from typing import Iterable
 
-from paperutils.accessions import classify_accession, extract_accessions
+from paperutils.accessions import classify_accession, extract_accessions, extract_code_repos, extract_dataset_resources
 from paperutils.fetchers import (
     FETCHERS,
     CrossrefFetcher,
@@ -75,18 +75,19 @@ def get_paper(
     """Build a one-stop paper dossier."""
 
     paper = resolve(identifier_text, domain=domain, timeout=timeout)
-    extracted = extract_accessions(paper.data_availability)
+    extracted = _dedupe_accessions([
+        *extract_accessions(paper.data_availability),
+        *extract_dataset_resources(paper.data_availability),
+    ])
     if depth == "full":
         extracted = _dedupe_accessions([*extracted, *query_gwas_catalog(paper, timeout=timeout)])
-    else:
-        extracted = _dedupe_accessions(extracted)
     datasets = _dataset_records(extracted, verify=depth == "full", timeout=timeout)
     return PaperRecord(
         identity=paper,
         abstract=paper.abstract,
         data_availability=paper.data_availability,
         supplement=_supplement_from_links(paper.full_text_links),
-        code_repos=[],
+        code_repos=extract_code_repos(paper.data_availability),
         datasets=datasets,
         full_text_links=paper.full_text_links,
         sources=paper.sources,
@@ -230,8 +231,10 @@ def _dataset_records(items: Iterable[Accession], verify: bool, timeout: float) -
             accession=item.accession,
             type=item.type,
             description=item.description,
+            url=_resource_url(item.accession),
+            download=_resource_url(item.accession),
         )
-        if verify:
+        if verify and record.url is None:
             detail = explain_accession(item.accession, timeout=timeout)
             record.title = detail.title
             record.organism = detail.organism
@@ -241,6 +244,14 @@ def _dataset_records(items: Iterable[Accession], verify: bool, timeout: float) -
             record.source = detail.source
         records.append(record)
     return records
+
+
+def _resource_url(accession: str) -> str | None:
+    if accession.startswith(("http://", "https://")):
+        return accession
+    if accession.lower().startswith("10."):
+        return f"https://doi.org/{accession}"
+    return None
 
 
 def _supplement_from_links(links: list[dict[str, str]]) -> dict[str, object]:
