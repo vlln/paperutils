@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paperutils"
+version = "0.1.0"
+description = "Dependency-free CLI utilities for paper metadata and dataset accessions."
+readme = "TASK.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+paperutils = "paperutils.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
