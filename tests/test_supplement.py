@@ -92,6 +92,39 @@ class SupplementTests(unittest.TestCase):
         self.assertIn("10.5281/zenodo.14559457", text)
         self.assertNotIn("Code is elsewhere", text)
 
+    def test_pmc_page_chrome_is_not_data_availability(self):
+        html = """
+        <html><body>
+          <p>data availability statements, or supplementary materials included in this article.</p>
+          <h2>Supplementary Materials</h2>
+          <p>NIHMS905135-supplement-1.pdf (1.5MB, pdf)</p>
+          <h2>ACTIONS</h2>
+          <p>View on publisher site. PDF. Cite. Collections.</p>
+          <h2>RESOURCES</h2>
+          <p>Similar articles. Cited by other articles. Links to NCBI Databases.</p>
+        </body></html>
+        """
+
+        self.assertIsNone(_extract_availability_from_html(html))
+
+    def test_pmc_html_heading_extraction_ignores_following_navigation(self):
+        html = """
+        <html><body>
+          <h2>Availability of data and materials</h2>
+          <p>The sequencing data are available under accession PRJNA123456.</p>
+          <h2>Supplementary Materials</h2>
+          <p>Additional file 1. Supplemental tables.</p>
+          <h2>ACTIONS</h2>
+          <p>View on publisher site. PDF. Cite.</p>
+        </body></html>
+        """
+
+        text = _extract_availability_from_html(html)
+
+        self.assertIn("PRJNA123456", text)
+        self.assertNotIn("Additional file", text)
+        self.assertNotIn("View on publisher site", text)
+
 
 if __name__ == "__main__":
     unittest.main()
