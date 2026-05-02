@@ -367,7 +367,19 @@ def _crossref_work_to_metadata(work: dict[str, Any], source: str) -> PaperMetada
     for link in work.get("link", []) or []:
         url = link.get("URL")
         if url:
-            meta.full_text_links.append({"publisher": url})
+            meta.full_text_links.append({
+                _classify_link(
+                    url,
+                    default="publisher",
+                    content_type=link.get("content-type"),
+                    intended_application=link.get("intended-application"),
+                ): url
+            })
+    for relation in ("is-supplemented-by", "has-supplement"):
+        for item in work.get("relation", {}).get(relation, []) or []:
+            relation_url = _relation_url(item)
+            if relation_url:
+                meta.full_text_links.append({"supplement": relation_url})
     if work.get("URL"):
         meta.full_text_links.append({"publisher": work["URL"]})
     meta.add_source(source)
@@ -535,9 +547,14 @@ def _europepmc_links(result: dict[str, Any]) -> list[dict[str, str]]:
         links.append({"publisher": f"https://doi.org/{doi}"})
     for item in result.get("fullTextUrlList", {}).get("fullTextUrl", []) or []:
         url = item.get("url")
-        site = (item.get("site") or "full_text").lower().replace(" ", "_")
         if url:
-            links.append({site: url})
+            label = _classify_link(
+                url,
+                default=(item.get("site") or "full_text").lower().replace(" ", "_"),
+                content_type=item.get("documentStyle"),
+                intended_application=item.get("availability"),
+            )
+            links.append({label: url})
     return links
 
 
@@ -608,6 +625,37 @@ def _first(value: Any) -> str | None:
         return str(value[0])
     if isinstance(value, str):
         return value
+    return None
+
+
+def _classify_link(
+    url: str,
+    default: str,
+    content_type: str | None = None,
+    intended_application: str | None = None,
+) -> str:
+    haystack = " ".join(
+        value.lower()
+        for value in (url, content_type or "", intended_application or "")
+        if value
+    )
+    if any(marker in haystack for marker in ("supplement", "supplementary", "suppl", "suppinfo")):
+        return "supplement"
+    if any(marker in haystack for marker in ("jats", "xml", "source.xml")):
+        return "jatsxml"
+    if "application/pdf" in haystack or url.lower().endswith(".pdf"):
+        return default
+    return default
+
+
+def _relation_url(item: dict[str, Any]) -> str | None:
+    value = item.get("id")
+    if not value:
+        return None
+    if item.get("id-type") == "doi":
+        return f"https://doi.org/{value}"
+    if str(value).startswith(("http://", "https://")):
+        return str(value)
     return None
 
 

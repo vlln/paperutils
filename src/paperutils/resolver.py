@@ -246,15 +246,33 @@ def _dataset_records(items: Iterable[Accession], verify: bool, timeout: float) -
 def _supplement_from_links(links: list[dict[str, str]]) -> dict[str, object]:
     pdf = None
     files = []
+    seen_files = set()
     for link in links:
         if not link:
             continue
         link_type, url = next(iter(link.items()))
-        if pdf is None and (link_type in {"publisher", "preprint", "pmc"} or url.endswith(".pdf")):
+        normalized_type = _supplement_link_type(link_type, url)
+        if pdf is None and normalized_type == "pdf":
             pdf = url
-        if "supp" in url.lower() or "jatsxml" in link_type:
-            files.append(url)
+        if normalized_type in {"supplement", "jatsxml", "xml", "source"}:
+            marker = (normalized_type, url)
+            if marker not in seen_files:
+                files.append({"type": normalized_type, "url": url})
+                seen_files.add(marker)
     return {"pdf": pdf or "Not found", "files": files}
+
+
+def _supplement_link_type(link_type: str, url: str) -> str:
+    text = f"{link_type} {url}".lower()
+    if "jatsxml" in text or "source.xml" in text:
+        return "jatsxml"
+    if "xml" in text:
+        return "xml"
+    if any(marker in text for marker in ("supplement", "supplementary", "suppl", "suppinfo")):
+        return "supplement"
+    if link_type in {"publisher", "preprint", "pmc"} or url.lower().endswith(".pdf"):
+        return "pdf"
+    return link_type
 
 
 def _lookup_candidates(kind: str, requested_db: str) -> list[str]:
