@@ -17,8 +17,21 @@ class AccessionTests(unittest.TestCase):
         found = extract_accessions(text)
         self.assertEqual([item.accession for item in found], ["GSE123456", "SRP111222", "PRJNA765432"])
 
+    def test_extract_ena_submission_and_study_accessions(self):
+        text = (
+            "Published metagenomics datasets analyzed here are available from ENA: "
+            "accession number ERA000116 (Qin et al, 2010) and ERP003612 "
+            "(Le Chatelier et al, 2013). The sample accession is ERS581126."
+        )
+        found = extract_accessions(text)
+        self.assertEqual(
+            [(item.type, item.accession) for item in found],
+            [("ENA", "ERA000116"), ("ENA", "ERP003612"), ("ENA", "ERS581126")],
+        )
+
     def test_classify_accession(self):
         self.assertEqual(classify_accession("GSE123456"), "GEO")
+        self.assertEqual(classify_accession("ERA000116"), "ENA")
         self.assertEqual(classify_accession("PRJEB54321"), "ENA")
         self.assertEqual(classify_accession("GCA_000001405.29"), "Assembly")
 
