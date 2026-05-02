@@ -12,10 +12,14 @@ class AccessionTests(unittest.TestCase):
     def test_extract_accessions(self):
         text = (
             "Raw data are available under GEO accession GSE123456. "
-            "Sequencing reads are in PRJNA765432 and SRP111222."
+            "Sequencing reads are in PRJNA765432 and SRP111222. "
+            "CNGB data are under CNP0003685."
         )
         found = extract_accessions(text)
-        self.assertEqual([item.accession for item in found], ["GSE123456", "SRP111222", "PRJNA765432"])
+        self.assertEqual(
+            [item.accession for item in found],
+            ["GSE123456", "SRP111222", "PRJNA765432", "CNP0003685"],
+        )
 
     def test_extract_ena_submission_and_study_accessions(self):
         text = (
@@ -34,6 +38,7 @@ class AccessionTests(unittest.TestCase):
         self.assertEqual(classify_accession("ERA000116"), "ENA")
         self.assertEqual(classify_accession("PRJEB54321"), "ENA")
         self.assertEqual(classify_accession("GCA_000001405.29"), "Assembly")
+        self.assertEqual(classify_accession("CNP0003685"), "CNGB")
 
     def test_extract_code_repos(self):
         text = (
@@ -49,7 +54,8 @@ class AccessionTests(unittest.TestCase):
         text = (
             "Processed data are at https://zenodo.org/records/123456 and "
             "Figshare DOI 10.6084/m9.figshare.123456.v1. "
-            "Dryad data: https://datadryad.org/dataset/doi:10.5061/dryad.ab12cd3."
+            "Dryad data: https://datadryad.org/dataset/doi:10.5061/dryad.ab12cd3. "
+            "CNGB data are at https://db.cngb.org/search/project/CNP0001664."
         )
         found = extract_dataset_resources(text)
         self.assertEqual(
@@ -57,6 +63,7 @@ class AccessionTests(unittest.TestCase):
             [
                 ("Zenodo", "https://zenodo.org/records/123456"),
                 ("Dryad", "https://datadryad.org/dataset/doi:10.5061/dryad.ab12cd3"),
+                ("CNGB", "https://db.cngb.org/search/project/CNP0001664"),
                 ("Figshare", "10.6084/m9.figshare.123456.v1"),
                 ("Dryad", "10.5061/dryad.ab12cd3"),
             ],

@@ -90,6 +90,8 @@ class EuropePMCFetcher(Fetcher):
         meta = _europepmc_result_to_metadata(results[0], self.name)
         _mark_match(meta, identifier)
         _require_title_match(identifier, meta)
+        if not meta.data_availability and meta.pmcid:
+            meta.data_availability = _fetch_pmc_availability_text(meta.pmcid, timeout)
         return meta
 
 
@@ -411,6 +413,89 @@ def _europepmc_result_to_metadata(result: dict[str, Any], source: str) -> PaperM
         meta.full_text_links.append(link)
     meta.add_source(source)
     return meta
+
+
+def _fetch_pmc_availability_text(pmcid: str, timeout: float) -> str | None:
+    """Fetch a PMC article page and extract its availability statement."""
+
+    try:
+        html_text = get_text(f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid}/", timeout=timeout)
+    except FetchError:
+        return None
+    return _extract_availability_from_html(html_text)
+
+
+def _extract_availability_from_html(html_text: str) -> str | None:
+    """Extract data/code availability text from a PMC-style HTML article."""
+
+    text = _html_to_text(html_text)
+    lower = text.lower()
+    start_markers = (
+        "data availability statement",
+        "data availability",
+        "data and code availability",
+        "data and materials availability",
+        "availability of data and materials",
+        "availability of data",
+    )
+    candidates = _availability_candidates(text, lower, start_markers)
+    if not candidates:
+        return None
+    return max(candidates, key=_availability_score)[:4000]
+
+
+def _availability_candidates(text: str, lower: str, start_markers: tuple[str, ...]) -> list[str]:
+    stop_markers = (
+        "code availability",
+        "supplementary information",
+        "acknowledgements",
+        "author contributions",
+        "competing interests",
+        "conflict of interest",
+        "ethics declarations",
+        "footnotes",
+        "references",
+    )
+    candidates = []
+    for marker in start_markers:
+        start = 0
+        while True:
+            start = lower.find(marker, start)
+            if start == -1:
+                break
+            end = _first_marker_position(lower, stop_markers, start + len(marker) + 1)
+            section = text[start:end].strip() if end is not None else text[start:].strip()
+            if section:
+                candidates.append(section)
+            start += len(marker)
+    return candidates
+
+
+def _availability_score(section: str) -> tuple[int, int]:
+    lower = section.lower()
+    score = 0
+    if "http://" in lower or "https://" in lower:
+        score += 4
+    if re.search(r"\b(?:gcst\d{6,}|gse\d{3,}|sr[aprxr]\d{3,}|prjna\d{3,}|cngb|cnp\d{3,})\b", lower):
+        score += 4
+    if re.search(r"\b10\.(?:5281|6084|5061|17605)/[-._;()/:a-z0-9]+\b", lower):
+        score += 4
+    if "available" in lower:
+        score += 1
+    return score, -len(section)
+
+
+def _html_to_text(html_text: str) -> str:
+    cleaned = re.sub(r"(?is)<(script|style|svg)\b.*?</\1>", " ", html_text)
+    cleaned = re.sub(r"(?i)<br\s*/?>", " ", cleaned)
+    cleaned = re.sub(r"(?i)</(?:p|div|section|article|h[1-6]|li)>", ". ", cleaned)
+    return _strip_tags(cleaned)
+
+
+def _first_marker_position(text: str, markers: tuple[str, ...], start: int) -> int | None:
+    positions = [text.find(marker, start) for marker in markers]
+    positions = [position for position in positions if position != -1]
+    return min(positions) if positions else None
 
 
 def _europepmc_result_to_search(result: dict[str, Any]) -> SearchResult:

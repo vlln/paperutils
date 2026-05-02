@@ -1,6 +1,6 @@
 import unittest
 
-from paperutils.fetchers import _crossref_work_to_metadata, _europepmc_links
+from paperutils.fetchers import _crossref_work_to_metadata, _europepmc_links, _extract_availability_from_html
 from paperutils.resolver import _supplement_from_links
 
 
@@ -73,7 +73,25 @@ class SupplementTests(unittest.TestCase):
             ],
         )
 
+    def test_pmc_html_data_availability_is_extracted(self):
+        html = """
+        <html><body>
+          <h2>Methods</h2><p>Methods text.</p>
+          <h2>Data availability</h2>
+          <p>Summary statistics are available from the GWAS Catalog under
+          accessions GCST90709872 to GCST90711133.</p>
+          <p>Processed data are available at Zenodo (10.5281/zenodo.14559457).</p>
+          <h2>Code availability</h2><p>Code is elsewhere.</p>
+        </body></html>
+        """
+
+        text = _extract_availability_from_html(html)
+
+        self.assertIn("Data availability", text)
+        self.assertIn("GCST90709872", text)
+        self.assertIn("10.5281/zenodo.14559457", text)
+        self.assertNotIn("Code is elsewhere", text)
+
 
 if __name__ == "__main__":
     unittest.main()
-

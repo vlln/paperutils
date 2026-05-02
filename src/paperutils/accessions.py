@@ -29,6 +29,7 @@ ACCESSION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("dbGaP", re.compile(r"\bphs\d{6}(?:\.\w+)?\b", re.IGNORECASE)),
     ("GWAS", re.compile(r"\bGCST\d{6,}\b", re.IGNORECASE)),
     ("ArrayExpress", re.compile(r"\bE-[A-Z]{4}-\d+\b", re.IGNORECASE)),
+    ("CNGB", re.compile(r"\bCNP\d{6,}\b", re.IGNORECASE)),
 ]
 
 URL_RE = re.compile(r"https?://[^\s<>()\]\"']+", re.IGNORECASE)
@@ -38,6 +39,7 @@ DATASET_DOI_RE = re.compile(
 )
 
 DATASET_HOST_TYPES = {
+    "db.cngb.org": "CNGB",
     "zenodo.org": "Zenodo",
     "figshare.com": "Figshare",
     "datadryad.org": "Dryad",

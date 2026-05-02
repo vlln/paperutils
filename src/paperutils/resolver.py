@@ -251,6 +251,8 @@ def _resource_url(accession: str) -> str | None:
         return accession
     if accession.lower().startswith("10."):
         return f"https://doi.org/{accession}"
+    if accession.upper().startswith("CNP"):
+        return f"https://db.cngb.org/search/project/{accession.upper()}"
     return None
 
 
