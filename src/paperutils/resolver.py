@@ -9,6 +9,7 @@ from paperutils.accessions import classify_accession, extract_accessions, extrac
 from paperutils.fetchers import (
     FETCHERS,
     CrossrefFetcher,
+    lookup_dataset_resource,
     lookup_ena,
     lookup_ncbi,
     query_gwas_catalog,
@@ -234,14 +235,25 @@ def _dataset_records(items: Iterable[Accession], verify: bool, timeout: float) -
             url=_resource_url(item.accession),
             download=_resource_url(item.accession),
         )
-        if verify and record.url is None:
-            detail = explain_accession(item.accession, timeout=timeout)
-            record.title = detail.title
-            record.organism = detail.organism
-            record.samples = detail.samples
-            record.status = detail.status
-            record.submitted = detail.submitted
-            record.source = detail.source
+        if verify:
+            if record.url is None:
+                detail = explain_accession(item.accession, timeout=timeout)
+                record.title = detail.title
+                record.organism = detail.organism
+                record.samples = detail.samples
+                record.status = detail.status
+                record.submitted = detail.submitted
+                record.source = detail.source
+            elif record.type in {"Zenodo", "Figshare", "Dryad", "OSF", "Dataset DOI"}:
+                detail = lookup_dataset_resource(item.accession, timeout=timeout)
+                if detail:
+                    record.title = detail.get("title")
+                    record.description = detail.get("description") or record.description
+                    record.creators = detail.get("creators")
+                    record.published = detail.get("published")
+                    record.files = detail.get("files")
+                    if detail.get("status"):
+                        record.status = detail["status"]
         records.append(record)
     return records
 

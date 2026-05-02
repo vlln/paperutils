@@ -59,15 +59,46 @@ class MatchingTests(unittest.TestCase):
         correction = PaperMetadata(
             title="Author Correction: Effect of host genetics on the gut microbiome in 7,738 participants of the Dutch Microbiome Project.",
             doi="10.1038/s41588-022-01164-2",
+            year="2022",
         )
         original = PaperMetadata(
             title="Effect of host genetics on the gut microbiome in 7,738 participants of the Dutch Microbiome Project.",
             doi="10.1038/s41588-021-00992-y",
+            year="2022",
         )
 
         match = _first_matching_title_candidate(identifier, [correction, original], "test")
 
         self.assertEqual(match.doi, "10.1038/s41588-021-00992-y")
+
+    def test_titles_match_short_title_in_citation_like_query(self):
+        self.assertTrue(
+            titles_match(
+                "Pitts N B et al Dental caries Nat Rev Dis Primer 3 17030 2017",
+                "Dental caries.",
+            )
+        )
+
+    def test_first_matching_title_candidate_uses_citation_year(self):
+        identifier = Identifier(
+            "title",
+            "Dental caries Nat Rev Dis Primer 2017 Pitts",
+            "Dental caries Nat Rev Dis Primer 2017 Pitts",
+        )
+        older = PaperMetadata(
+            title="Dental caries.",
+            doi="10.1016/s0140-6736(00)42916-8",
+            year="1944",
+        )
+        target = PaperMetadata(
+            title="Dental caries.",
+            doi="10.1038/nrdp.2017.30",
+            year="2017",
+        )
+
+        match = _first_matching_title_candidate(identifier, [older, target], "test")
+
+        self.assertEqual(match.doi, "10.1038/nrdp.2017.30")
 
 
 if __name__ == "__main__":

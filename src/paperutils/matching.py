@@ -48,7 +48,23 @@ def titles_match(query: str, candidate: str | None, threshold: float = 0.82) -> 
 
     if _has_unrequested_publication_prefix(query, candidate):
         return False
+    if _candidate_title_in_citation_query(query, candidate):
+        return True
     return title_similarity(query, candidate) >= threshold
+
+
+def _candidate_title_in_citation_query(query: str, candidate: str | None) -> bool:
+    left = normalize_title(query)
+    right = normalize_title(candidate)
+    if not left or not right:
+        return False
+    left_words = set(left.split())
+    right_words = set(right.split())
+    if not right_words <= left_words:
+        return False
+    if len(left_words - right_words) < 3:
+        return False
+    return bool(re.search(r"\b(?:19|20)\d{2}\b", left))
 
 
 def _has_unrequested_publication_prefix(query: str, candidate: str | None) -> bool:

@@ -1,6 +1,7 @@
 import os
 import unittest
 
+from paperutils.fetchers import lookup_dataset_resource, lookup_zenodo
 from paperutils.resolver import explain_accession, find_papers, get_paper
 
 
@@ -46,6 +47,27 @@ class LiveSmokeTests(unittest.TestCase):
         results = find_papers("attention is all you need", domain="cs", limit=1, timeout=8)
         self.assertGreaterEqual(len(results), 1)
         self.assertTrue(results[0].arxiv_id)
+
+    def test_lookup_zenodo_live(self):
+        result = lookup_zenodo("10.5281/zenodo.13152792", timeout=8)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertTrue(result.get("title"))
+        self.assertTrue(result.get("status"))
+
+    def test_lookup_dataset_resource_dispatch(self):
+        result = lookup_dataset_resource("10.5281/zenodo.13152792", timeout=8)
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertTrue(result.get("title"))
+
+    def test_get_paper_with_zenodo_datasets(self):
+        record = get_paper("10.1038/s41588-024-01909-1", depth="full", timeout=10)
+        zenodo_datasets = [d for d in record.datasets if d.type == "Zenodo"]
+        self.assertGreater(len(zenodo_datasets), 0)
+        for ds in zenodo_datasets:
+            self.assertTrue(ds.title, f"Zenodo dataset {ds.accession} should have a title")
+            self.assertTrue(ds.status, f"Zenodo dataset {ds.accession} should have a status")
 
 
 if __name__ == "__main__":

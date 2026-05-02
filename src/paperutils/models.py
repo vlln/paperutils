@@ -97,6 +97,9 @@ class DatasetRecord:
     source: str | None = None
     url: str | None = None
     download: str | None = None
+    creators: str | None = None
+    published: str | None = None
+    files: list[dict[str, Any]] | None = None
 
 
 @dataclass

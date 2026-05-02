@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import html
 import re
+import urllib.parse
 import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
 from typing import Any, Iterable
@@ -148,7 +149,7 @@ class PubmedFetcher(Fetcher):
                 timeout=timeout,
             )
             meta = _pubmed_xml_to_metadata(xml_text, self.name)
-            if titles_match(identifier.value, meta.title):
+            if _title_candidate_matches(identifier, meta):
                 return pmid
         raise FetchError("PubMed returned no matching PMID")
 
@@ -230,8 +231,9 @@ FETCHERS: dict[str, list[Fetcher]] = {
 
 
 def search_biomed(query: str, limit: int, timeout: float) -> list[SearchResult]:
-    """Search papers with Europe PMC first, then Crossref as fallback."""
+    """Search papers with Europe PMC and Crossref, merging results."""
 
+    epmc_results: list[SearchResult] = []
     try:
         data = get_json(
             EuropePMCFetcher.search_url,
@@ -243,18 +245,42 @@ def search_biomed(query: str, limit: int, timeout: float) -> list[SearchResult]:
             },
             timeout=timeout,
         )
-        results = data.get("resultList", {}).get("result", [])
-        if results:
-            return [_europepmc_result_to_search(item) for item in results[:limit]]
+        items = data.get("resultList", {}).get("result", [])
+        epmc_results = [_europepmc_result_to_search(item) for item in items[:limit]]
     except FetchError:
         pass
 
-    data = get_json(
-        CrossrefFetcher.base_url,
-        params={"query.title": query, "rows": max(1, limit)},
-        timeout=timeout,
-    )
-    return [_crossref_work_to_search(item) for item in data.get("message", {}).get("items", [])[:limit]]
+    crossref_results: list[SearchResult] = []
+    try:
+        data = get_json(
+            CrossrefFetcher.base_url,
+            params={"query.title": query, "rows": max(1, limit)},
+            timeout=timeout,
+        )
+        crossref_results = [
+            _crossref_work_to_search(item)
+            for item in data.get("message", {}).get("items", [])[:limit]
+        ]
+    except FetchError:
+        pass
+
+    seen_dois: set[str] = set()
+    merged: list[SearchResult] = []
+    for epmc, cr in zip(epmc_results, crossref_results):
+        for r in (epmc, cr):
+            key = r.doi or r.title.lower()
+            if key in seen_dois:
+                continue
+            seen_dois.add(key)
+            merged.append(r)
+    for r in epmc_results[len(crossref_results):] + crossref_results[len(epmc_results):]:
+        key = r.doi or r.title.lower()
+        if key in seen_dois:
+            continue
+        seen_dois.add(key)
+        merged.append(r)
+
+    return merged[:limit]
 
 
 def search_cs(query: str, limit: int, timeout: float) -> list[SearchResult]:
@@ -833,9 +859,23 @@ def _first_matching_title_candidate(
 ) -> PaperMetadata:
     for meta in candidates:
         _mark_match(meta, identifier)
-        if identifier.kind != "title" or titles_match(identifier.value, meta.title):
+        if identifier.kind != "title" or _title_candidate_matches(identifier, meta):
             return meta
     raise FetchError(f"{source_name} returned no matching title candidates")
+
+
+def _title_candidate_matches(identifier: Identifier, meta: PaperMetadata) -> bool:
+    if not titles_match(identifier.value, meta.title):
+        return False
+    query_year = _year_from_text(identifier.value)
+    if query_year and meta.year and meta.year != query_year:
+        return False
+    return True
+
+
+def _year_from_text(text: str) -> str | None:
+    match = re.search(r"\b((?:19|20)\d{2})\b", text)
+    return match.group(1) if match else None
 
 
 def _title_confidence(meta: PaperMetadata) -> int:
@@ -883,3 +923,185 @@ def _version_number(value: Any) -> int:
         return int(str(value))
     except (TypeError, ValueError):
         return 0
+
+
+# -- Dataset resource lookups (Zenodo, Figshare, Dryad, OSF) -------------------
+
+_RESOURCE_DISPATCH = [
+    ("zenodo", "Zenodo"),
+    ("figshare", "Figshare"),
+    ("dryad", "Dryad"),
+    ("osf.io", "OSF"),
+]
+
+
+def _extract_zenodo_id(accession: str) -> str | None:
+    m = re.search(r"zenodo\S*?(\d{5,})", accession)
+    return m.group(1) if m else None
+
+
+def _extract_figshare_id(accession: str) -> str | None:
+    m = re.search(r"figshare\S*?(\d{4,})", accession)
+    return m.group(1) if m else None
+
+
+def _extract_dryad_doi(accession: str) -> str | None:
+    m = re.search(r"10\.5061/dryad\.\S+", accession)
+    return m.group(0).rstrip(".,;)\"'") if m else None
+
+
+def _extract_osf_guid(accession: str) -> str | None:
+    m = re.search(r"osf\.io/([a-z0-9]+)", accession, re.IGNORECASE)
+    return m.group(1) if m else None
+
+
+def _format_file_size(size_bytes: int) -> str:
+    if size_bytes >= 1_000_000_000:
+        return f"{size_bytes / 1_000_000_000:.1f} GB"
+    if size_bytes >= 1_000_000:
+        return f"{size_bytes / 1_000_000:.0f} MB"
+    if size_bytes >= 1_000:
+        return f"{size_bytes / 1_000:.0f} KB"
+    return f"{size_bytes} B"
+
+
+def _date_prefix(value: str | None) -> str | None:
+    if value and len(value) >= 10:
+        return value[:10]
+    return None
+
+
+def _join_creators(creators: list[dict[str, Any]], *, key: str = "name") -> str | None:
+    names = [c.get(key, "") for c in creators if c.get(key)]
+    return ", ".join(names) if names else None
+
+
+def lookup_zenodo(accession: str, timeout: float) -> dict[str, Any] | None:
+    record_id = _extract_zenodo_id(accession)
+    if not record_id:
+        return None
+    try:
+        data = get_json(f"https://zenodo.org/api/records/{record_id}", timeout=timeout)
+    except FetchError:
+        return None
+
+    metadata = data.get("metadata", {})
+    files = []
+    for f in data.get("files", []):
+        links = f.get("links") or {}
+        dl = links.get("self", "")
+        if dl:
+            files.append({
+                "name": f.get("key", ""),
+                "size": _format_file_size(f.get("size", 0)),
+                "download": dl,
+            })
+
+    return {
+        "title": metadata.get("title"),
+        "description": _normalize_space(_strip_tags(metadata.get("description") or "")),
+        "creators": _join_creators(metadata.get("creators", [])),
+        "published": metadata.get("publication_date"),
+        "files": files or None,
+        "status": data.get("status") or metadata.get("access_right"),
+    }
+
+
+def lookup_figshare(accession: str, timeout: float) -> dict[str, Any] | None:
+    article_id = _extract_figshare_id(accession)
+    if not article_id:
+        return None
+    try:
+        data = get_json(
+            f"https://api.figshare.com/v2/articles/{article_id}",
+            timeout=timeout,
+        )
+    except FetchError:
+        return None
+
+    authors = data.get("authors", [])
+    files = []
+    for f in data.get("files", []):
+        dl = f.get("download_url", "")
+        if dl:
+            files.append({
+                "name": f.get("name", ""),
+                "size": _format_file_size(f.get("size", 0)),
+                "download": dl,
+            })
+
+    return {
+        "title": data.get("title"),
+        "description": _normalize_space(_strip_tags(data.get("description") or "")),
+        "creators": _join_creators(authors, key="full_name"),
+        "published": _date_prefix(data.get("published_date")),
+        "files": files or None,
+        "status": "public" if data.get("is_public") else data.get("status", "").lower() or None,
+    }
+
+
+def lookup_dryad(accession: str, timeout: float) -> dict[str, Any] | None:
+    doi = _extract_dryad_doi(accession)
+    if not doi:
+        return None
+    encoded = urllib.parse.quote(doi, safe="")
+    try:
+        data = get_json(
+            f"https://datadryad.org/api/v2/datasets/{encoded}",
+            timeout=timeout,
+        )
+    except FetchError:
+        return None
+
+    authors = data.get("authors", [])
+    names = []
+    for a in authors:
+        name = f"{a.get('firstName', '')} {a.get('lastName', '')}".strip()
+        if name:
+            names.append(name)
+    creator_str = ", ".join(names) if names else None
+
+    return {
+        "title": data.get("title"),
+        "description": _normalize_space(_strip_tags(data.get("abstract") or "")),
+        "creators": creator_str,
+        "published": data.get("publicationDate"),
+        "files": None,
+        "status": data.get("visibility") or data.get("curationStatus"),
+    }
+
+
+def lookup_osf(accession: str, timeout: float) -> dict[str, Any] | None:
+    guid = _extract_osf_guid(accession)
+    if not guid:
+        return None
+    try:
+        data = get_json(
+            f"https://api.osf.io/v2/nodes/{guid}/",
+            timeout=timeout,
+        )
+    except FetchError:
+        return None
+
+    attrs = data.get("data", {}).get("attributes", {})
+    return {
+        "title": attrs.get("title"),
+        "description": _normalize_space(_strip_tags(attrs.get("description") or "")),
+        "creators": None,
+        "published": _date_prefix(attrs.get("date_created")),
+        "files": None,
+        "status": "public" if attrs.get("public") else "private",
+    }
+
+
+def lookup_dataset_resource(accession: str, timeout: float) -> dict[str, Any] | None:
+    lower = accession.lower()
+    if "zenodo" in lower:
+        return lookup_zenodo(accession, timeout)
+    if "figshare" in lower:
+        return lookup_figshare(accession, timeout)
+    if "dryad" in lower:
+        return lookup_dryad(accession, timeout)
+    if "osf.io" in lower:
+        return lookup_osf(accession, timeout)
+    return None
