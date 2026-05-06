@@ -99,6 +99,7 @@ class DatasetRecord:
     download: str | None = None
     creators: str | None = None
     published: str | None = None
+    version: str | None = None
     files: list[dict[str, Any]] | None = None
 
 

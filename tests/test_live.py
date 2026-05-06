@@ -1,7 +1,8 @@
 import os
 import unittest
 
-from paperutils.fetchers import lookup_dataset_resource, lookup_zenodo
+from paperutils.fetchers import lookup_dataset_resource
+from paperutils.fetchers.resources import lookup_zenodo
 from paperutils.resolver import explain_accession, find_papers, get_paper
 
 

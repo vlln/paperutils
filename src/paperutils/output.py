@@ -109,29 +109,6 @@ def _print_mapping(data: Any, indent: int = 0) -> None:
                 print(f"{prefix}- {_format_value(item)}")
 
 
-def _metadata_dict(meta: PaperMetadata, *, full_abstract: bool) -> dict[str, Any]:
-    authors = _format_authors(meta.authors)
-    abstract = meta.abstract or "Not found"
-    if not full_abstract and len(abstract) > 500:
-        abstract = abstract[:497].rstrip() + "..."
-    return {
-        "title": meta.title or "Not found",
-        "authors": authors,
-        "journal": meta.journal or "Not found",
-        "year": meta.year or "Not found",
-        "doi": meta.doi or "Not found",
-        "arxiv_id": meta.arxiv_id or "Not found",
-        "preprint_server": meta.preprint_server or "Not found",
-        "preprint_version": meta.preprint_version or "Not found",
-        "pmid": meta.pmid or "Not found",
-        "pmcid": meta.pmcid or "Not found",
-        "abstract": abstract,
-        "data_availability": meta.data_availability or "Not found",
-        "full_text_links": meta.full_text_links,
-        "sources": meta.sources,
-    }
-
-
 def _format_authors(authors: list[str]) -> str:
     if not authors:
         return "Not found"

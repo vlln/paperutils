@@ -1,6 +1,7 @@
 import unittest
 
-from paperutils.fetchers import _crossref_work_to_metadata, _europepmc_links, _extract_availability_from_html
+from paperutils.fetchers.crossref import _crossref_work_to_metadata
+from paperutils.fetchers.europepmc import _europepmc_links, _extract_availability_from_html
 from paperutils.resolver import _supplement_from_links
 
 

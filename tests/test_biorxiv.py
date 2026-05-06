@@ -1,6 +1,6 @@
 import unittest
 
-from paperutils.fetchers import _biorxiv_item_to_metadata, _latest_biorxiv_item
+from paperutils.fetchers.biorxiv import _biorxiv_item_to_metadata, _latest_biorxiv_item
 
 
 class BioRxivTests(unittest.TestCase):

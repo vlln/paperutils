@@ -21,7 +21,6 @@ def build_parser() -> argparse.ArgumentParser:
     get_parser.add_argument("identifier")
     get_parser.add_argument("--depth", choices=("fast", "full"), default="full")
     get_parser.add_argument("--json", action="store_true", help="output JSON")
-    get_parser.add_argument("--yaml", action="store_true", help="output YAML-like text")
     get_parser.add_argument("--full-abstract", action="store_true", help="do not truncate abstract")
     get_parser.add_argument("--domain", choices=("auto", "biomed", "cs"), default="auto")
     get_parser.add_argument("--timeout", type=float, default=4.0, help="API timeout in seconds")

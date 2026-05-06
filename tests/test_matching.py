@@ -1,6 +1,6 @@
 import unittest
 
-from paperutils.fetchers import _first_matching_title_candidate
+from paperutils.fetchers.helpers import first_matching_title_candidate
 from paperutils.identifiers import Identifier
 from paperutils.matching import title_similarity, titles_match
 from paperutils.models import PaperMetadata
@@ -67,7 +67,7 @@ class MatchingTests(unittest.TestCase):
             year="2022",
         )
 
-        match = _first_matching_title_candidate(identifier, [correction, original], "test")
+        match = first_matching_title_candidate(identifier, [correction, original], "test")
 
         self.assertEqual(match.doi, "10.1038/s41588-021-00992-y")
 
@@ -96,7 +96,7 @@ class MatchingTests(unittest.TestCase):
             year="2017",
         )
 
-        match = _first_matching_title_candidate(identifier, [older, target], "test")
+        match = first_matching_title_candidate(identifier, [older, target], "test")
 
         self.assertEqual(match.doi, "10.1038/nrdp.2017.30")
 

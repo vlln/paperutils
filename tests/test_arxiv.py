@@ -1,6 +1,6 @@
 import unittest
 
-from paperutils.fetchers import _arxiv_entries, _arxiv_entry_to_metadata, _arxiv_entry_to_search
+from paperutils.fetchers.arxiv import _arxiv_entries, _arxiv_entry_to_metadata, _arxiv_entry_to_search
 
 
 ARXIV_XML = """<?xml version="1.0" encoding="UTF-8"?>

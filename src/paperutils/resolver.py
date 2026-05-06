@@ -32,21 +32,20 @@ def resolve(identifier_text: str, domain: str = "auto", timeout: float = 4.0) ->
         raise ValueError(f"unsupported identifier/domain combination: {identifier.kind}/{selected_domain}")
 
     merged = PaperMetadata()
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=len(fetchers))
-    futures = {
-        executor.submit(fetcher.fetch, identifier, timeout): fetcher.name
-        for fetcher in fetchers
-    }
-    done, pending = concurrent.futures.wait(futures, timeout=timeout + 0.5)
-    for future in done:
-        try:
-            partial = future.result(timeout=0)
-        except Exception:
-            continue
-        _merge_metadata(merged, partial)
-    for future in pending:
-        future.cancel()
-    executor.shutdown(wait=False, cancel_futures=True)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(fetchers)) as executor:
+        futures = {
+            executor.submit(fetcher.fetch, identifier, timeout): fetcher.name
+            for fetcher in fetchers
+        }
+        done, pending = concurrent.futures.wait(futures, timeout=timeout + 0.5)
+        for future in done:
+            try:
+                partial = future.result(timeout=0)
+            except Exception:
+                continue
+            _merge_metadata(merged, partial)
+        for future in pending:
+            future.cancel()
 
     if not merged.sources:
         raise RuntimeError("no metadata sources returned a usable result")
@@ -251,6 +250,7 @@ def _dataset_records(items: Iterable[Accession], verify: bool, timeout: float) -
                     record.description = detail.get("description") or record.description
                     record.creators = detail.get("creators")
                     record.published = detail.get("published")
+                    record.version = detail.get("version")
                     record.files = detail.get("files")
                     if detail.get("status"):
                         record.status = detail["status"]

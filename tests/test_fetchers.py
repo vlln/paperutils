@@ -2,14 +2,13 @@
 
 import unittest
 
-from paperutils.fetchers import (
-    _date_prefix,
+from paperutils.fetchers.helpers import date_prefix, join_creators
+from paperutils.fetchers.resources import (
     _extract_dryad_doi,
     _extract_figshare_id,
     _extract_osf_guid,
     _extract_zenodo_id,
     _format_file_size,
-    _join_creators,
     lookup_dataset_resource,
     lookup_dryad,
     lookup_figshare,
@@ -97,30 +96,30 @@ class FormatHelpersTests(unittest.TestCase):
         self.assertEqual(_format_file_size(2_500_000_000), "2.5 GB")
 
     def test_date_prefix_iso_datetime(self):
-        self.assertEqual(_date_prefix("2023-01-15T12:30:00Z"), "2023-01-15")
+        self.assertEqual(date_prefix("2023-01-15T12:30:00Z"), "2023-01-15")
 
     def test_date_prefix_short_date(self):
-        self.assertEqual(_date_prefix("2023-01-15"), "2023-01-15")
+        self.assertEqual(date_prefix("2023-01-15"), "2023-01-15")
 
     def test_date_prefix_none(self):
-        self.assertIsNone(_date_prefix(None))
+        self.assertIsNone(date_prefix(None))
 
     def test_date_prefix_too_short(self):
-        self.assertIsNone(_date_prefix("2023"))
+        self.assertIsNone(date_prefix("2023"))
 
     def test_join_creators(self):
         creators = [
             {"name": "Smith J", "affiliation": "UCL"},
             {"name": "Doe K", "affiliation": "MIT"},
         ]
-        self.assertEqual(_join_creators(creators), "Smith J, Doe K")
+        self.assertEqual(join_creators(creators), "Smith J, Doe K")
 
     def test_join_creators_empty(self):
-        self.assertIsNone(_join_creators([]))
+        self.assertIsNone(join_creators([]))
 
     def test_join_creators_custom_key(self):
         creators = [{"full_name": "Smith J"}, {"full_name": "Doe K"}]
-        self.assertEqual(_join_creators(creators, key="full_name"), "Smith J, Doe K")
+        self.assertEqual(join_creators(creators, key="full_name"), "Smith J, Doe K")
 
 
 class ZenodoLookupTests(unittest.TestCase):
@@ -156,7 +155,7 @@ class ZenodoLookupTests(unittest.TestCase):
         import urllib.request
         from unittest import mock
 
-        with mock.patch("paperutils.fetchers.get_json", return_value=data):
+        with mock.patch("paperutils.fetchers.resources.get_json", return_value=data):
             result = lookup_zenodo("10.5281/zenodo.12345678", timeout=4)
 
         self.assertIsNotNone(result)
@@ -199,7 +198,7 @@ class FigshareLookupTests(unittest.TestCase):
 
         from unittest import mock
 
-        with mock.patch("paperutils.fetchers.get_json", return_value=data):
+        with mock.patch("paperutils.fetchers.resources.get_json", return_value=data):
             result = lookup_figshare("10.6084/m9.figshare.12345678.v1", timeout=4)
 
         self.assertIsNotNone(result)
@@ -229,7 +228,7 @@ class DryadLookupTests(unittest.TestCase):
 
         from unittest import mock
 
-        with mock.patch("paperutils.fetchers.get_json", return_value=data):
+        with mock.patch("paperutils.fetchers.resources.get_json", return_value=data):
             result = lookup_dryad("10.5061/dryad.abc123", timeout=4)
 
         self.assertIsNotNone(result)
@@ -258,7 +257,7 @@ class OSFLookupTests(unittest.TestCase):
 
         from unittest import mock
 
-        with mock.patch("paperutils.fetchers.get_json", return_value=data):
+        with mock.patch("paperutils.fetchers.resources.get_json", return_value=data):
             result = lookup_osf("10.17605/osf.io/abcde", timeout=4)
 
         self.assertIsNotNone(result)
@@ -275,7 +274,7 @@ class DispatcherTests(unittest.TestCase):
     def test_dispatches_to_zenodo(self):
         from unittest import mock
 
-        with mock.patch("paperutils.fetchers.lookup_zenodo", return_value={"title": "Z"}) as m:
+        with mock.patch("paperutils.fetchers.resources.lookup_zenodo", return_value={"title": "Z"}) as m:
             result = lookup_dataset_resource("10.5281/zenodo.12345678", timeout=4)
             m.assert_called_once()
         self.assertEqual(result, {"title": "Z"})
@@ -283,7 +282,7 @@ class DispatcherTests(unittest.TestCase):
     def test_dispatches_to_figshare(self):
         from unittest import mock
 
-        with mock.patch("paperutils.fetchers.lookup_figshare", return_value={"title": "F"}) as m:
+        with mock.patch("paperutils.fetchers.resources.lookup_figshare", return_value={"title": "F"}) as m:
             result = lookup_dataset_resource("10.6084/m9.figshare.123.v1", timeout=4)
             m.assert_called_once()
         self.assertEqual(result, {"title": "F"})
@@ -291,7 +290,7 @@ class DispatcherTests(unittest.TestCase):
     def test_dispatches_to_dryad(self):
         from unittest import mock
 
-        with mock.patch("paperutils.fetchers.lookup_dryad", return_value={"title": "D"}) as m:
+        with mock.patch("paperutils.fetchers.resources.lookup_dryad", return_value={"title": "D"}) as m:
             result = lookup_dataset_resource("10.5061/dryad.abc", timeout=4)
             m.assert_called_once()
         self.assertEqual(result, {"title": "D"})
@@ -299,7 +298,7 @@ class DispatcherTests(unittest.TestCase):
     def test_dispatches_to_osf(self):
         from unittest import mock
 
-        with mock.patch("paperutils.fetchers.lookup_osf", return_value={"title": "O"}) as m:
+        with mock.patch("paperutils.fetchers.resources.lookup_osf", return_value={"title": "O"}) as m:
             result = lookup_dataset_resource("10.17605/osf.io/abcde", timeout=4)
             m.assert_called_once()
         self.assertEqual(result, {"title": "O"})
