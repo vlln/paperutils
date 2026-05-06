@@ -1,173 +1,257 @@
 # paperutils
 
-`paperutils` is a dependency-free Python CLI for paper discovery, paper dossiers,
-and dataset/accession explanation. It currently focuses on biomedical papers and
-arXiv/CS preprints, using only the Python standard library.
+`paperutils` is a dependency-free Python CLI that consolidates paper metadata
+from multiple scholarly APIs into a single, structured dossier. It also
+extracts and explains dataset accession numbers (GEO, SRA, BioProject, etc.)
+from data availability statements.
 
-## Commands
+Biomedical papers and arXiv/CS preprints are supported. No API keys are needed
+— all sources are public.
 
-`paperutils` exposes three core commands:
+## Installation
 
-```bash
-./paperutils get <identifier>
-./paperutils find <query>
-./paperutils explain <accession>
-```
+Python 3.10+ is required. The project has zero runtime dependencies.
 
-There are no legacy aliases. Older command names such as `resolve`,
-`accessions`, `lookup`, and `search` are intentionally not supported.
-
-## `get`
-
-Get a complete paper dossier from a DOI, PMID, PMCID, arXiv ID, URL, preprint
-DOI, or title.
-
-```bash
-./paperutils get 10.1038/s41586-020-2649-2
-./paperutils get PMID:32939066 --json
-./paperutils get arXiv:1901.01234
-./paperutils get https://www.biorxiv.org/content/10.1101/2019.12.31.892091v1.full.pdf
-```
-
-Output is structured as:
-
-```yaml
-identity:
-  title: ...
-  authors: ...
-  journal: ...
-  year: ...
-  doi: ...
-  pmid: ...
-  pmcid: ...
-  arxiv_id: ...
-  preprint_server: ...
-  preprint_version: ...
-abstract: ...
-data_availability: ...
-supplement:
-  pdf: ...
-  files: []
-code_repos: []
-datasets:
-  - accession: ...
-    type: ...
-    title: ...
-    samples: ...
-    status: ...
-full_text_links:
-  - type: publisher
-    url: ...
-sources:
-  - europepmc
-  - crossref
-```
-
-Depth controls how much work `get` does:
-
-```bash
-./paperutils get <identifier> --depth fast
-./paperutils get <identifier> --depth full
-```
-
-- `fast`: metadata, abstract, data availability, full text links, and extracted
-  dataset accessions. It does not verify dataset details.
-- `full`: all fast fields, plus GWAS Catalog lookup and per-accession
-  `explain` expansion where possible.
-
-`get` queries Crossref, Europe PMC, PubMed, arXiv, bioRxiv, and medRxiv as
-appropriate. It tolerates partial API failures and returns the best dossier from
-sources that respond in time.
-
-## `find`
-
-Find candidate papers by title or keyword.
-
-```bash
-./paperutils find "array programming numpy" --limit 3
-./paperutils find "attention is all you need" --domain cs --limit 3
-./paperutils find "alzheimer spatial transcriptomics" --domain biomed
-```
-
-Options:
-
-- `--domain auto|biomed|cs|physics`: `biomed` uses Europe PMC/Crossref; `cs`
-  uses arXiv. `physics` is reserved and currently not implemented.
-- `--limit N`: number of candidates, default `5`.
-- `--json`: JSON output.
-
-Agents should use `find` when the exact DOI/PMID/arXiv ID is not known, then
-call `get` on the chosen candidate.
-
-## `explain`
-
-Explain one dataset/accession identifier.
-
-```bash
-./paperutils explain GSE100
-./paperutils explain PRJNA765432 --db bioproject
-./paperutils explain SRP111222 --db sra --json
-```
-
-Supported sources currently include ENA Portal API and NCBI E-utilities. The
-default `--db auto` mode chooses likely sources from the accession pattern.
-
-## Run From Source
-
-```bash
-./paperutils --help
-./paperutils get 10.1038/s41586-020-2649-2
-./paperutils find "numpy array programming" --limit 3
-./paperutils explain GSE100
-```
-
-The source checkout runner adds `src/` to `sys.path`, so no installation step is
-required.
-
-## Install Locally
+**pip install:**
 
 ```bash
 python3 -m pip install .
 paperutils --help
 ```
 
-The project declares no runtime dependencies.
-
-## Tests
-
-Offline tests use only local fixtures and standard-library `unittest`:
+**Run from source (no install):**
 
 ```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
+git clone https://github.com/vlln/paperutils.git
+cd paperutils
+./paperutils --help
 ```
 
-Optional live smoke tests hit public APIs and are disabled by default:
+The `./paperutils` launcher adds `src/` to `sys.path`, so no venv or pip step
+is needed.
+
+**Install as an agent skill:**
 
 ```bash
-PAPERUTILS_LIVE_TESTS=1 PYTHONPATH=src python3 -m unittest discover -s tests -v
+skit install github:vlln/paperutils --all
 ```
 
-Live tests are smoke coverage only. They can fail because of network issues,
-remote service downtime, or upstream data changes.
+The [paperutils skill](https://github.com/vlln/paperutils/tree/master/skills/paperutils) ships with metadata and
+usage rules so agents know when and how to call each command.
 
-## Current Scope
+## Usage
 
-Implemented:
+```bash
+# Search for papers by keyword or title
+paperutils find "attention is all you need" --domain cs --limit 3
+paperutils find "alzheimer spatial transcriptomics" --domain biomed
 
-- DOI, PMID, PMCID, URL, arXiv ID, and title-like identifier parsing.
-- One-stop `get` dossier assembly.
-- Biomedical metadata via Crossref, Europe PMC, PubMed, bioRxiv, and medRxiv.
-- CS/arXiv metadata and search via the arXiv Atom API.
-- Supplementary file classification from Crossref and Europe PMC links.
-- Dataset accession extraction from data availability text.
-- GitHub, Zenodo, Figshare, Dryad, and OSF extraction from data availability text.
-- GWAS Catalog lookup by PMID during `get --depth full`.
-- ENA and NCBI accession explanation.
-- Text and JSON output.
+# Fetch a paper dossier by DOI, PMID, arXiv ID, URL, or title
+paperutils get 10.1038/s41586-020-2649-2
+paperutils get PMID:32939066 --json
+paperutils get arXiv:1901.01234 --depth fast
 
-Planned:
+# Explain a dataset accession
+paperutils explain GSE100
+paperutils explain PRJNA765432 --db bioproject
+paperutils explain SRP111222 --db sra --json
+```
 
-- `download` for PDFs and supplement files.
-- Papers With Code and GitHub enrichment for CS papers.
-- Zenodo/Figshare metadata and dataset DOI explanation.
-- Better accession recall from Europe PMC cross references and full-text links.
+### `find` — Search papers
+
+Searches for papers by keyword or title. Returns ranked candidates; call `get`
+on the best match to obtain the full dossier.
+
+```bash
+paperutils find <query> [--limit N] [--json] [--domain auto|biomed|cs]
+```
+
+| Flag | Effect |
+|---|---|
+| `--domain biomed` | Europe PMC + Crossref search. |
+| `--domain cs` | arXiv Atom API. |
+| `--domain auto` | (default) Chooses domain from query heuristics. |
+| `--limit N` | Number of candidates (default 5). |
+
+### `get` — Paper dossier
+
+Assembles a structured dossier from Crossref, Europe PMC, PubMed, arXiv,
+bioRxiv, and medRxiv. Accepts DOIs, PMIDs, PMCIDs, arXiv IDs, preprint URLs,
+and free-text titles.
+
+```bash
+paperutils get <identifier> [--depth fast|full] [--json] [--full-abstract]
+```
+
+| Flag | Effect |
+|---|---|
+| `--depth fast` | Metadata, abstract, links, and extracted accessions (no verification). |
+| `--depth full` | (default) Fast fields + GWAS Catalog lookup + per-accession ENA/NCBI expansion. |
+| `--json` | JSON output instead of YAML-like text. |
+| `--full-abstract` | Print full abstract without truncation. |
+
+Output fields include: title, authors, journal/year, DOIs, PMID/PMCID, arXiv
+ID, abstract, data availability statement, supplement links, code repositories,
+dataset accessions, and full-text links.
+
+### `explain` — Dataset accession lookup
+
+Resolves an accession identifier to its metadata: title, source database,
+sample count, and status.
+
+```bash
+paperutils explain <accession> [--db auto|geo|ena|sra|bioproject|assembly] [--json]
+```
+
+Powered by ENA Portal API and NCBI E-utilities. `--db auto` infers the source
+from the accession prefix (e.g. `SRP` → SRA, `GSE` → GEO).
+
+## Data Sources
+
+### `find` — where search results come from
+
+| Domain | API | Returns |
+|---|---|---|
+| `biomed` | [Europe PMC](https://www.ebi.ac.uk/europepmc/webservices/rest/search) | title, year, journal, DOI, PMID, PMCID |
+| `biomed` | [Crossref](https://api.crossref.org/works) | title, year, journal, DOI |
+| `cs` | [arXiv](https://export.arxiv.org/api/query) | title, year, DOI, arXiv ID |
+
+Biomed queries Europe PMC and Crossref in parallel, then merges results
+pairwise with duplicate detection (by DOI, falling back to title).
+
+### `get` — where dossier fields come from
+
+**Biomed papers** — up to 5 fetchers run in parallel via
+`ThreadPoolExecutor`, each with a configurable timeout:
+
+| Fetcher | API | Key fields |
+|---|---|---|
+| Crossref | [Crossref API](https://api.crossref.org/works) | title, authors, journal, year, DOI, abstract |
+| Europe PMC | [Europe PMC](https://www.ebi.ac.uk/europepmc/webservices/rest) | abstract, data availability, PMID, PMCID, full-text links |
+| PubMed | [NCBI E-utilities](https://eutils.ncbi.nlm.nih.gov/) | abstract, PMID, full-text links |
+| bioRxiv | [bioRxiv API](https://api.biorxiv.org/details) | preprint version, JATS XML, bioRxiv PDF link |
+| medRxiv | [medRxiv API](https://api.biorxiv.org/details) | preprint version, JATS XML, medRxiv PDF link |
+
+**CS papers** — 1 fetcher:
+
+| Fetcher | API | Key fields |
+|---|---|---|
+| arXiv | [arXiv Atom API](https://export.arxiv.org/api/query) | title, authors, abstract, arXiv ID, DOI |
+
+Fields are merged by precedence: sources with higher confidence overwrite
+lower-confidence values. Europe PMC is authoritative for data availability
+statements.
+
+**`--depth full` enrichment** (additional APIs, one call per accession):
+
+| Purpose | API | What it adds |
+|---|---|---|
+| Accession expansion | [ENA Portal API](https://www.ebi.ac.uk/ena/portal/api/) | study title, organism, submission date, status |
+| Accession expansion | [NCBI E-utilities](https://eutils.ncbi.nlm.nih.gov/) | title, sample count, organism, submission date |
+| GWAS Catalog | [GWAS Catalog REST API](https://www.ebi.ac.uk/gwas/rest/api) | GWAS study accessions linked to the PMID |
+| Data repositories | [Zenodo](https://zenodo.org/api/) / [Figshare](https://api.figshare.com/) / [Dryad](https://datadryad.org/api/) / [OSF](https://api.osf.io/) | dataset metadata for direct resource URLs |
+
+### `explain` — where accession metadata comes from
+
+Accessions are classified by prefix (23 regex patterns), then looked up in
+a sequence of candidates until one succeeds:
+
+| API | Returns |
+|---|---|
+| [ENA Portal API](https://www.ebi.ac.uk/ena/portal/api/) (TSV) | title, organism, status, submission date |
+| [NCBI E-utilities](https://eutils.ncbi.nlm.nih.gov/) (esearch + esummary) | title, sample count, organism, submission date |
+
+## How It Works
+
+### Architecture
+
+```
+                        ┌──────────────┐
+                        │    cli.py    │
+                        └──────┬───────┘
+               ┌───────────────┼───────────────┐
+          ┌────┴────┐   ┌─────┴─────┐   ┌──────┴──────┐
+          │   get   │   │   find    │   │  explain    │
+          └────┬────┘   └─────┬─────┘   └──────┬──────┘
+               │              │                │
+        ┌──────┴──────┐  ┌────┴────┐   ┌───────┴───────┐
+        │  resolver   │  │ search  │   │  accessions   │
+        └──────┬──────┘  └─────────┘   └───────────────┘
+               │
+    ┌──────────┼──────────┐
+    │   fetchers package  │
+    │  (one per source)   │
+    │  arxiv    crossref  │
+    │  biorxiv  pubmed    │
+    │  europepmc          │
+    └─────────────────────┘
+```
+
+### Get — Resolution pipeline
+
+1. **Identify** — `identifiers.py` parses the input string and classifies it
+   as a DOI, PMID, PMCID, arXiv ID, URL, or free-text title.
+2. **Resolve** — `resolver.py` orchestrates calls to the relevant fetchers in
+   parallel, each with a configurable timeout.
+3. **Merge** — Results from multiple sources are merged into a single dossier.
+   Fields are populated from the most authoritative source available.
+4. **Enrich** — Accession numbers are extracted from the data availability
+   statement via regex patterns. At `--depth full`, each accession is verified
+   and expanded via `explain`. GWAS Catalog associations are looked up by PMID.
+5. **Output** — `output.py` renders the dossier as YAML-like text or JSON.
+
+### Find — Search pipeline
+
+1. **Domain selection** — `--domain auto` uses query heuristics to choose
+   between biomed and CS. Explicit `--domain biomed` or `--domain cs` bypasses
+   detection.
+2. **Query** — Biomed queries Europe PMC (REST API) and Crossref (title search)
+   in parallel. CS queries the arXiv Atom API with `all:<query>` ranked by
+   relevance.
+3. **Merge** — Biomed results from Europe PMC and Crossref are interleaved
+   pairwise, with duplicates removed by DOI (falling back to title). CS results
+   from arXiv are returned as-is.
+4. **Output** — Results are ranked and trimmed to `--limit` (default 5).
+   `output.py` renders them as a table with year, PMID, DOI/arXiv ID, and title.
+
+### Explain — Accession lookup pipeline
+
+1. **Classify** — `accessions.py` matches the accession against 23 regex
+   patterns covering GEO, SRA, ENA, BioProject, Assembly, dbGaP, GWAS,
+   ArrayExpress, and CNGB prefixes (e.g. `GSE` → GEO, `SRP` → SRA, `PRJNA` →
+   BioProject).
+2. **Candidate selection** — Based on the classified type, a prioritized list
+   of databases to try is built. `--db auto` infers this from the prefix;
+   explicit `--db` overrides it.
+3. **Lookup** — Each candidate is tried in order:
+   - **ENA Portal API** — returns TSV with study title, organism, status, and
+     submission date.
+   - **NCBI E-utilities** — `esearch` resolves the accession to a UID, then
+     `esummary` returns JSON metadata including title, sample count, organism,
+     and submission date.
+4. **Output** — The first successful lookup wins. `output.py` renders the
+   result with accession, title, organism, type, samples, submitted date,
+   status, and data source.
+
+### Design decisions
+
+- **Zero dependencies** — only the Python standard library. This eliminates
+  dependency conflicts and makes the tool trivially portable.
+- **Tolerant of partial failures** — each API call has a default 4s timeout
+  and failures are silently skipped. The best dossier from responding sources
+  is always returned.
+- **Public APIs only** — no API keys, tokens, or authentication required.
+  All sources (Crossref, Europe PMC, PubMed, arXiv, NCBI E-utilities, ENA)
+  are freely accessible.
+
+## Limitations
+
+- `download` (PDF/supplement retrieval) is planned but not yet implemented.
+- CS enrichment (Papers With Code, GitHub metadata) is planned.
+- `physics` domain under `find` is reserved but not yet connected to an API.
+- Title-based `get` queries require the paper to exist in Europe PMC or
+  Crossref search indices.
+
+## License
+
+MIT
