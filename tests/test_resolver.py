@@ -2,7 +2,12 @@ import unittest
 from unittest import mock
 
 from paperutils.models import PaperMetadata
-from paperutils.resolver import _dataset_records, _enrich_title_resolution_with_canonical_doi, _merge_metadata
+from paperutils.resolver import (
+    _dataset_records,
+    _enrich_title_resolution_with_canonical_doi,
+    _merge_metadata,
+    get_paper,
+)
 from paperutils.models import Accession
 
 
@@ -122,6 +127,33 @@ class ResolverTests(unittest.TestCase):
         self.assertEqual(records[0].download, "https://zenodo.org/records/123456")
         self.assertEqual(records[1].url, "https://doi.org/10.6084/m9.figshare.123456.v1")
         self.assertEqual(records[1].download, "https://doi.org/10.6084/m9.figshare.123456.v1")
+
+
+    @mock.patch("paperutils.resolver.enumerate_supplement")
+    @mock.patch("paperutils.resolver.resolve")
+    def test_get_paper_full_depth_integrates_scraped_files(self, resolve_mock, enum_mock):
+        paper = PaperMetadata(
+            pmcid="PMC1234567",
+            full_text_links=[{"publisher": "https://example.com/paper.pdf"}],
+        )
+        resolve_mock.return_value = paper
+        enum_mock.return_value = [
+            {"name": "suppl.pdf", "url": "https://pmc.example/suppl.pdf", "size": "100KB", "format": "pdf"},
+        ]
+        record = get_paper("10.1234/example", depth="full", timeout=4)
+
+        self.assertEqual(record.supplement["pdf"], "https://example.com/paper.pdf")
+        moesm = [f for f in record.supplement["files"] if isinstance(f, dict) and f.get("type") == "moesm"]
+        self.assertEqual(len(moesm), 1)
+        self.assertEqual(moesm[0]["name"], "suppl.pdf")
+
+    @mock.patch("paperutils.resolver.enumerate_supplement")
+    @mock.patch("paperutils.resolver.resolve")
+    def test_get_paper_fast_depth_skips_scraping(self, resolve_mock, enum_mock):
+        paper = PaperMetadata(full_text_links=[])
+        resolve_mock.return_value = paper
+        get_paper("10.1234/example", depth="fast", timeout=4)
+        enum_mock.assert_not_called()
 
 
 if __name__ == "__main__":

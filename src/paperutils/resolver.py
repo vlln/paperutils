@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
-from typing import Iterable
+from typing import Any, Iterable
 
 from paperutils.accessions import classify_accession, extract_accessions, extract_code_repos, extract_dataset_resources
 from paperutils.fetchers import (
@@ -16,6 +16,8 @@ from paperutils.fetchers import (
     search_biomed,
     search_cs,
 )
+from paperutils.fetchers.supplement import enumerate_supplement
+from paperutils.fetchers.europepmc import fetch_pmc_availability_text
 from paperutils.identifiers import Identifier, infer_domain, parse_identifier
 from paperutils.models import Accession, DatasetRecord, LookupResult, PaperMetadata, PaperRecord, SearchResult
 
@@ -52,7 +54,14 @@ def resolve(identifier_text: str, domain: str = "auto", timeout: float = 4.0) ->
     if identifier.kind == "title":
         _enrich_title_resolution_with_canonical_doi(merged, timeout)
     if not merged.data_availability:
-        merged.data_availability = "Not found"
+        if merged.pmcid:
+            scraped = fetch_pmc_availability_text(merged.pmcid, timeout)
+            if scraped:
+                merged.data_availability = scraped
+            else:
+                merged.data_availability = "Not found"
+        else:
+            merged.data_availability = "Not found"
     merged.full_text_links = _dedupe_links(merged.full_text_links)
     return merged
 
@@ -82,11 +91,16 @@ def get_paper(
     if depth == "full":
         extracted = _dedupe_accessions([*extracted, *query_gwas_catalog(paper, timeout=timeout)])
     datasets = _dataset_records(extracted, verify=depth == "full", timeout=timeout)
+    supplement = _supplement_from_links(paper.full_text_links)
+    if depth == "full":
+        scraped = enumerate_supplement(paper, timeout)
+        if scraped:
+            supplement = _merge_scraped_supplement(supplement, scraped)
     return PaperRecord(
         identity=paper,
         abstract=paper.abstract,
         data_availability=paper.data_availability,
-        supplement=_supplement_from_links(paper.full_text_links),
+        supplement=supplement,
         code_repos=extract_code_repos(paper.data_availability),
         datasets=datasets,
         full_text_links=paper.full_text_links,
@@ -285,6 +299,28 @@ def _supplement_from_links(links: list[dict[str, str]]) -> dict[str, object]:
                 files.append({"type": normalized_type, "url": url})
                 seen_files.add(marker)
     return {"pdf": pdf or "Not found", "files": files}
+
+
+def _merge_scraped_supplement(
+    supplement: dict[str, object],
+    scraped_files: list[dict[str, Any]],
+) -> dict[str, object]:
+    existing_urls = {
+        entry.get("url") for entry in supplement.get("files", []) if isinstance(entry, dict)
+    }
+    merged_files = list(supplement.get("files", []))
+    for scraped in scraped_files:
+        if scraped["url"] in existing_urls:
+            continue
+        merged_files.append({
+            "type": "moesm",
+            "url": scraped["url"],
+            "name": scraped["name"],
+            "size": scraped.get("size"),
+            "format": scraped["format"],
+        })
+        existing_urls.add(scraped["url"])
+    return {"pdf": supplement.get("pdf"), "files": merged_files}
 
 
 def _supplement_link_type(link_type: str, url: str) -> str:

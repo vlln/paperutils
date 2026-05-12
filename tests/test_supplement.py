@@ -1,7 +1,11 @@
 import unittest
+from unittest import mock
 
 from paperutils.fetchers.crossref import _crossref_work_to_metadata
-from paperutils.fetchers.europepmc import _europepmc_links, _extract_availability_from_html
+from paperutils.fetchers.europepmc import _europepmc_links, _extract_availability_from_xml
+from paperutils.fetchers.supplement import enumerate_supplement
+from paperutils.http import FetchError
+from paperutils.models import PaperMetadata
 from paperutils.resolver import _supplement_from_links
 
 
@@ -74,57 +78,143 @@ class SupplementTests(unittest.TestCase):
             ],
         )
 
-    def test_pmc_html_data_availability_is_extracted(self):
-        html = """
+    def test_pmc_xml_data_availability_is_extracted(self):
+        text = (
+            "Methods. Methods text. "
+            "Data availability. "
+            "Summary statistics are available from the GWAS Catalog under "
+            "accessions GCST90709872 to GCST90711133. "
+            "Processed data are available at Zenodo (10.5281/zenodo.14559457). "
+            ". Code availability. Code is elsewhere."
+        )
+
+        result = _extract_availability_from_xml(text)
+
+        self.assertIsNotNone(result)
+        self.assertIn("Data availability", result)
+        self.assertIn("GCST90709872", result)
+        self.assertIn("10.5281/zenodo.14559457", result)
+        self.assertNotIn("Code is elsewhere", result)
+
+    def test_pmc_xml_ignores_irrelevant_content(self):
+        text = (
+            "Some introduction. "
+            "Data availability. Nothing to report. "
+            ". Supplementary Materials. Additional file. "
+            ". References. [1] Some citation."
+        )
+
+        result = _extract_availability_from_xml(text)
+
+        self.assertIsNotNone(result)
+        self.assertIn("Nothing to report", result)
+        self.assertNotIn("Additional file", result)
+        self.assertNotIn("Some citation", result)
+
+    def test_pmc_xml_extracts_with_accessions(self):
+        text = (
+            "Availability of data and materials. "
+            "The sequencing data are available under accession PRJNA123456. "
+            ". Supplementary Materials. Additional file 1."
+        )
+
+        result = _extract_availability_from_xml(text)
+
+        self.assertIsNotNone(result)
+        self.assertIn("PRJNA123456", result)
+        self.assertNotIn("Additional file", result)
+
+
+class SupplementScrapeTests(unittest.TestCase):
+    def test_enumerate_no_pmcid_returns_empty(self):
+        meta = PaperMetadata(pmcid=None)
+        result = enumerate_supplement(meta, timeout=4)
+        self.assertEqual(result, [])
+
+    @mock.patch("paperutils.fetchers.supplement.get_text")
+    def test_enumerate_from_pmc_html_with_moesm(self, get_text_mock):
+        get_text_mock.return_value = """
         <html><body>
-          <h2>Methods</h2><p>Methods text.</p>
-          <h2>Data availability</h2>
-          <p>Summary statistics are available from the GWAS Catalog under
-          accessions GCST90709872 to GCST90711133.</p>
-          <p>Processed data are available at Zenodo (10.5281/zenodo.14559457).</p>
-          <h2>Code availability</h2><p>Code is elsewhere.</p>
+        <section id="Sec12">
+          <h2>Supplementary Information</h2>
+          <section class="sm xbox font-sm" id="MOESM1">
+            <a href="/articles/instance/PMC1234567/bin/41598_2024_65538_MOESM1_ESM.pdf"
+               data-ga-action="click_feat_suppl">
+              Supplementary Figures.
+            </a><sup> (412.5KB, pdf)</sup>
+          </section>
+          <section class="sm xbox font-sm" id="MOESM2">
+            <a href="/articles/instance/PMC1234567/bin/41598_2024_65538_MOESM2_ESM.xlsx"
+               data-ga-action="click_feat_suppl">
+              Supplementary Table 1
+            </a><sup> (85.3KB, xlsx)</sup>
+          </section>
+        </section>
+        <section class="associated-data">
+          <section class="supplementary-materials">
+            <a href="/articles/instance/PMC1234567/bin/41598_2024_65538_MOESM1_ESM.pdf"
+               data-ga-action="click_feat_suppl">
+              Supplementary Figures.
+            </a><sup> (412.5KB, pdf)</sup>
+          </section>
+        </section>
         </body></html>
         """
+        meta = PaperMetadata(pmcid="PMC1234567")
+        result = enumerate_supplement(meta, timeout=4)
 
-        text = _extract_availability_from_html(html)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["name"], "41598_2024_65538_MOESM1_ESM.pdf")
+        self.assertEqual(
+            result[0]["url"],
+            "https://pmc.ncbi.nlm.nih.gov/articles/instance/PMC1234567/bin/41598_2024_65538_MOESM1_ESM.pdf",
+        )
+        self.assertEqual(result[0]["size"], "412.5KB")
+        self.assertEqual(result[0]["format"], "pdf")
+        self.assertEqual(result[1]["name"], "41598_2024_65538_MOESM2_ESM.xlsx")
+        self.assertEqual(result[1]["format"], "xlsx")
 
-        self.assertIn("Data availability", text)
-        self.assertIn("GCST90709872", text)
-        self.assertIn("10.5281/zenodo.14559457", text)
-        self.assertNotIn("Code is elsewhere", text)
+    @mock.patch("paperutils.fetchers.supplement.get_text", side_effect=FetchError("connection refused"))
+    def test_enumerate_http_error_returns_empty(self, get_text_mock):
+        meta = PaperMetadata(pmcid="PMC1234567")
+        result = enumerate_supplement(meta, timeout=4)
+        self.assertEqual(result, [])
 
-    def test_pmc_page_chrome_is_not_data_availability(self):
-        html = """
+    @mock.patch("paperutils.fetchers.supplement.get_text")
+    def test_enumerate_additional_file_pattern(self, get_text_mock):
+        get_text_mock.return_value = """
         <html><body>
-          <p>data availability statements, or supplementary materials included in this article.</p>
-          <h2>Supplementary Materials</h2>
-          <p>NIHMS905135-supplement-1.pdf (1.5MB, pdf)</p>
-          <h2>ACTIONS</h2>
-          <p>View on publisher site. PDF. Cite. Collections.</p>
-          <h2>RESOURCES</h2>
-          <p>Similar articles. Cited by other articles. Links to NCBI Databases.</p>
+        <section class="sm xbox font-sm" id="MOESM1">
+          <a href="/articles/instance/PMC9999999/bin/Additional_file_1.docx"
+             data-ga-action="click_feat_suppl">
+            Additional file 1
+          </a><sup> (24KB, docx)</sup>
+        </section>
         </body></html>
         """
+        meta = PaperMetadata(pmcid="PMC9999999")
+        result = enumerate_supplement(meta, timeout=4)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["name"], "Additional_file_1.docx")
+        self.assertEqual(result[0]["format"], "docx")
 
-        self.assertIsNone(_extract_availability_from_html(html))
-
-    def test_pmc_html_heading_extraction_ignores_following_navigation(self):
-        html = """
+    @mock.patch("paperutils.fetchers.supplement.get_text")
+    def test_enumerate_file_without_size_sup(self, get_text_mock):
+        get_text_mock.return_value = """
         <html><body>
-          <h2>Availability of data and materials</h2>
-          <p>The sequencing data are available under accession PRJNA123456.</p>
-          <h2>Supplementary Materials</h2>
-          <p>Additional file 1. Supplemental tables.</p>
-          <h2>ACTIONS</h2>
-          <p>View on publisher site. PDF. Cite.</p>
+        <section class="sm xbox font-sm">
+          <a href="/articles/instance/PMC1234567/bin/readme.txt"
+             data-ga-action="click_feat_suppl">
+            README
+          </a>
+        </section>
         </body></html>
         """
-
-        text = _extract_availability_from_html(html)
-
-        self.assertIn("PRJNA123456", text)
-        self.assertNotIn("Additional file", text)
-        self.assertNotIn("View on publisher site", text)
+        meta = PaperMetadata(pmcid="PMC1234567")
+        result = enumerate_supplement(meta, timeout=4)
+        self.assertEqual(len(result), 1)
+        self.assertIsNone(result[0]["size"])
+        self.assertEqual(result[0]["format"], "txt")
 
 
 if __name__ == "__main__":

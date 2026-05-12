@@ -42,7 +42,7 @@ class EuropePMCFetcher(Fetcher):
             "Europe PMC",
         )
         if not meta.data_availability and meta.pmcid:
-            meta.data_availability = _fetch_pmc_availability_text(meta.pmcid, timeout)
+            meta.data_availability = fetch_pmc_availability_text(meta.pmcid, timeout)
         return meta
 
 
@@ -111,15 +111,24 @@ def _europepmc_links(result: dict[str, Any]) -> list[dict[str, str]]:
 # -- PMC availability-text extraction ----------------------------------------
 
 
-def _fetch_pmc_availability_text(pmcid: str, timeout: float) -> str | None:
+def fetch_pmc_availability_text(pmcid: str, timeout: float) -> str | None:
+    """Extract data/code availability from PMC full-text XML via NCBI E-utilities."""
+    numeric_id = pmcid.removeprefix("PMC").removeprefix("pmc")
+    if not numeric_id.isdigit():
+        return None
+    url = f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id={numeric_id}&retmode=xml"
     try:
-        html_text = get_text(f"https://pmc.ncbi.nlm.nih.gov/articles/{pmcid}/", timeout=timeout)
+        xml_str = get_text(url, timeout=timeout)
     except FetchError:
         return None
-    return _extract_availability_from_html(html_text)
+    return _extract_availability_from_xml(xml_str)
 
 
-def _extract_availability_from_html(html_text: str) -> str | None:
+def _extract_availability_from_xml(xml_str: str) -> str | None:
+    text = re.sub(r"<[^>]+>", " ", xml_str)
+    text = re.sub(r"\s+", " ", text).strip()
+    lower = text.lower()
+
     start_markers = (
         "data availability statement",
         "data availability",
@@ -128,47 +137,6 @@ def _extract_availability_from_html(html_text: str) -> str | None:
         "availability of data and materials",
         "availability of data",
     )
-    candidates = _availability_candidates_from_headings(html_text, start_markers)
-    if not candidates:
-        text = _html_to_text(html_text)
-        lower = text.lower()
-        candidates = _availability_candidates(text, lower, start_markers)
-    candidates = [c for c in candidates if _availability_score(c)[0] > 0]
-    candidates = [c for c in candidates if not _is_pmc_page_chrome(c)]
-    if not candidates:
-        return None
-    return max(candidates, key=_availability_score)[:4000]
-
-
-def _availability_candidates_from_headings(html_text: str, start_markers: tuple[str, ...]) -> list[str]:
-    heading_re = re.compile(r"(?is)<h([1-6])\b[^>]*>(.*?)</h\1>")
-    headings = list(heading_re.finditer(html_text))
-    candidates = []
-    for index, heading in enumerate(headings):
-        heading_text = normalize_space(strip_tags(heading.group(2))).lower().rstrip(".:")
-        if not any(marker == heading_text or heading_text.startswith(f"{marker}.") for marker in start_markers):
-            continue
-        section_end = headings[index + 1].start() if index + 1 < len(headings) else len(html_text)
-        section_text = _html_to_text(html_text[heading.start():section_end]).strip()
-        if section_text:
-            candidates.append(section_text)
-    return candidates
-
-
-def _is_pmc_page_chrome(section: str) -> bool:
-    lower = section.lower()
-    chrome_markers = (
-        "data availability statements, or supplementary materials included in this article",
-        "actions. view on publisher site",
-        "resources. similar articles",
-        "follow ncbi",
-        "national library of medicine",
-        "add to collections",
-    )
-    return any(marker in lower for marker in chrome_markers)
-
-
-def _availability_candidates(text: str, lower: str, start_markers: tuple[str, ...]) -> list[str]:
     stop_markers = (
         "code availability",
         "supplementary materials",
@@ -180,9 +148,8 @@ def _availability_candidates(text: str, lower: str, start_markers: tuple[str, ..
         "ethics declarations",
         "footnotes",
         "references",
-        "actions",
-        "resources",
     )
+
     candidates = []
     for marker in start_markers:
         start = 0
@@ -192,34 +159,19 @@ def _availability_candidates(text: str, lower: str, start_markers: tuple[str, ..
                 break
             end = _first_marker_position(lower, stop_markers, start + len(marker) + 1)
             section = text[start:end].strip() if end is not None else text[start:].strip()
-            if section:
-                candidates.append(section)
+            if section and len(section) > len(marker) + 5:
+                candidates.append(section[:4000])
             start += len(marker)
-    return candidates
 
-
-def _availability_score(section: str) -> tuple[int, int]:
-    lower = section.lower()
-    score = 0
-    if "http://" in lower or "https://" in lower:
-        score += 4
-    if re.search(r"\b(?:gcst\d{6,}|gse\d{3,}|sr[aprxr]\d{3,}|prjna\d{3,}|cngb|cnp\d{3,})\b", lower):
-        score += 4
-    if re.search(r"\b10\.(?:5281|6084|5061|17605)/[-._;()/:a-z0-9]+\b", lower):
-        score += 4
-    if "available" in lower:
-        score += 1
-    return score, -len(section)
-
-
-def _html_to_text(html_text: str) -> str:
-    cleaned = re.sub(r"(?is)<(script|style|svg)\b.*?</\1>", " ", html_text)
-    cleaned = re.sub(r"(?i)<br\s*/?>", " ", cleaned)
-    cleaned = re.sub(r"(?i)</(?:p|div|section|article|h[1-6]|li)>", ". ", cleaned)
-    return strip_tags(cleaned)
+    if not candidates:
+        return None
+    return max(candidates, key=len)
 
 
 def _first_marker_position(text: str, markers: tuple[str, ...], start: int) -> int | None:
-    positions = [text.find(marker, start) for marker in markers]
-    positions = [p for p in positions if p != -1]
-    return min(positions) if positions else None
+    for marker in markers:
+        pattern = re.compile(r"(?:[.;]\s+|\.\s+|\n)\s*" + re.escape(marker), re.IGNORECASE)
+        m = pattern.search(text, start)
+        if m:
+            return m.start()
+    return None

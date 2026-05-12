@@ -70,8 +70,8 @@ class PubmedFetcher(Fetcher):
         raise FetchError("PubMed returned no matching PMID")
 
 
-def _pubmed_xml_to_metadata(xml_text: str, source: str) -> PaperMetadata:
-    root = ET.fromstring(xml_text)
+def _pubmed_xml_to_metadata(xml_str: str, source: str) -> PaperMetadata:
+    root = ET.fromstring(xml_str)
     article = root.find(".//PubmedArticle")
     if article is None:
         raise FetchError("PubMed returned no article")

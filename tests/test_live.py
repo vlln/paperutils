@@ -70,6 +70,17 @@ class LiveSmokeTests(unittest.TestCase):
             self.assertTrue(ds.title, f"Zenodo dataset {ds.accession} should have a title")
             self.assertTrue(ds.status, f"Zenodo dataset {ds.accession} should have a status")
 
+    def test_get_paper_full_depth_enumerates_supplement(self):
+        record = get_paper("10.1038/s41586-020-2649-2", depth="full", timeout=10)
+        self.assertIsInstance(record.supplement, dict)
+        self.assertIn("files", record.supplement)
+        moesm = [f for f in record.supplement["files"]
+                 if isinstance(f, dict) and f.get("type") == "moesm"]
+        for f_entry in moesm:
+            self.assertTrue(f_entry.get("name"), f"moesm entry should have name: {f_entry}")
+            self.assertTrue(f_entry.get("url"), f"moesm entry should have url: {f_entry}")
+            self.assertTrue(f_entry.get("format"), f"moesm entry should have format: {f_entry}")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -132,12 +132,19 @@ def _normalize_url(url: str) -> str:
 
 
 def _github_repo_url(url: str) -> str | None:
+    # GitHub
     match = re.match(r"https?://(?:www\.)?github\.com/([^/\s]+)/([^/#?\s]+)", url, re.IGNORECASE)
-    if not match:
-        return None
-    owner, repo = match.groups()
-    repo = repo.removesuffix(".git")
-    return f"https://github.com/{owner}/{repo}"
+    if match:
+        owner, repo = match.groups()
+        repo = repo.removesuffix(".git")
+        return f"https://github.com/{owner}/{repo}"
+    # Bitbucket
+    match = re.match(r"https?://(?:www\.)?bitbucket\.org/([^/\s]+)/([^/#?\s]+)", url, re.IGNORECASE)
+    if match:
+        owner, repo = match.groups()
+        repo = repo.removesuffix(".git")
+        return f"https://bitbucket.org/{owner}/{repo}"
+    return None
 
 
 def _dataset_type_for_url(url: str) -> str | None:
