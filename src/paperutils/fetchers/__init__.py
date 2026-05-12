@@ -3,6 +3,7 @@
 from paperutils.fetchers.base import Fetcher
 from paperutils.fetchers.arxiv import ArxivFetcher
 from paperutils.fetchers.biorxiv import BioRxivFetcher
+from paperutils.fetchers.chemrxiv import ChemRxivFetcher
 from paperutils.fetchers.crossref import CrossrefFetcher
 from paperutils.fetchers.europepmc import EuropePMCFetcher
 from paperutils.fetchers.pubmed import PubmedFetcher
@@ -13,6 +14,7 @@ from paperutils.fetchers.resources import lookup_dataset_resource
 BIOMED_FETCHERS: list[Fetcher] = [
     BioRxivFetcher("biorxiv"),
     BioRxivFetcher("medrxiv"),
+    ChemRxivFetcher(),
     CrossrefFetcher(),
     EuropePMCFetcher(),
     PubmedFetcher(),

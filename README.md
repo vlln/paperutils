@@ -131,6 +131,7 @@ pairwise with duplicate detection (by DOI, falling back to title).
 | PubMed | [NCBI E-utilities](https://eutils.ncbi.nlm.nih.gov/) | abstract, PMID, full-text links |
 | bioRxiv | [bioRxiv API](https://api.biorxiv.org/details) | preprint version, JATS XML, bioRxiv PDF link |
 | medRxiv | [medRxiv API](https://api.biorxiv.org/details) | preprint version, JATS XML, medRxiv PDF link |
+| chemRxiv | [Crossref API](https://api.crossref.org/works) | preprint version, PDF link |
 
 **CS papers** — 1 fetcher:
 
@@ -182,8 +183,8 @@ a sequence of candidates until one succeeds:
     │   fetchers package  │
     │  (one per source)   │
     │  arxiv    crossref  │
-    │  biorxiv  pubmed    │
-    │  europepmc          │
+    │  biorxiv  chemrxiv  │
+    │  pubmed   europepmc │
     └─────────────────────┘
 ```
 
@@ -234,6 +235,23 @@ a sequence of candidates until one succeeds:
    status, and data source.
 
 ### Design decisions
+
+**Why this exists.** `paperutils` is a CLI tool for AI agents. It does one thing:
+collect structured metadata about a paper. It does not download PDFs, run batch
+analyses, or generate plots — there are other tools for those jobs (e.g.
+[paperscraper](https://github.com/jannisborn/paperscraper) for bulk literature
+mining). The goal is to give an agent everything it needs to reason about a
+single paper — identity, abstract, data/code availability, linked datasets,
+supplement files — in a single command.
+
+**Unix philosophy.** Each subcommand (`find`, `get`, `explain`) is an
+independent tool that composes with others. `find` discovers candidates, `get`
+resolves one into a dossier, `explain` expands an accession. Agents chain them:
+search → pick best match → fetch dossier → verify datasets.
+
+**Single-paper, not batch.** Every API call in the resolution pipeline is tied
+to one identifier. There is no bulk dump, no local index, no queuing. This keeps
+the tool simple, stateless, and predictable under the 4-second default timeout.
 
 - **Zero dependencies** — only the Python standard library. This eliminates
   dependency conflicts and makes the tool trivially portable.
