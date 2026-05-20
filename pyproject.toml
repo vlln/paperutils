@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "paperutils"
 version = "0.1.0"
 description = "Dependency-free CLI utilities for paper metadata and dataset accessions."
-readme = "TASK.md"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
 
