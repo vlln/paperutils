@@ -4,10 +4,68 @@ from __future__ import annotations
 
 import re
 import urllib.parse
+from collections.abc import Callable
 from typing import Any
 
 from paperutils.http import FetchError, get_text
 from paperutils.models import PaperMetadata
+
+# -- Publisher-specific supplement URL rewriters ---------------------------------
+
+_Rewriter = Callable[[str, str, str], str | None]
+"""A rewriter takes (doi, filename, original_url) and returns a new URL or None."""
+
+
+def _rewrite_plos(doi: str, filename: str, _original_url: str) -> str | None:
+    """Rewrite PLoS PMC bin/ URLs to journals.plos.org article/file endpoint."""
+    m = re.search(r"\.(s\d+)\.", filename)
+    if not m:
+        return None
+    supp_num = m.group(1)
+    journal_code = "plosone"
+    jm = re.match(r"10\.1371/journal\.(\w+)\.", doi)
+    if jm:
+        journal_code = _PLOS_JOURNAL_PATH.get(jm.group(1), "plosone")
+    return f"https://journals.plos.org/{journal_code}/article/file?id={doi}.{supp_num}&type=supplementary"
+
+
+_PLOS_JOURNAL_PATH: dict[str, str] = {
+    "pone": "plosone",
+    "pbio": "plosbiology",
+    "pgen": "plosgenetics",
+    "pcbi": "ploscompbiol",
+    "pntd": "plosntds",
+    "ppat": "plospathogens",
+    "pmed": "plosmedicine",
+}
+
+_SUPPLEMENT_URL_REWRITERS: list[tuple[str, _Rewriter]] = [
+    ("10.1371/", _rewrite_plos),
+]
+
+
+def _rewrite_supplement_urls(
+    files: list[dict[str, Any]], meta: PaperMetadata
+) -> list[dict[str, Any]]:
+    """Append publisher-specific alternate URLs to supplement file entries."""
+    if not meta.doi:
+        return files
+    result = []
+    for entry in files:
+        alternates = []
+        for prefix, rewriter in _SUPPLEMENT_URL_REWRITERS:
+            if meta.doi.startswith(prefix):
+                alt_url = rewriter(meta.doi, entry.get("name", ""), entry["url"])
+                if alt_url:
+                    alternates.append(alt_url)
+                break
+        if alternates:
+            entry = {**entry, "alternate_urls": alternates}
+        result.append(entry)
+    return result
+
+
+# -- PMC supplementary material scraping -----------------------------------------
 
 _SUPP_A_RE = re.compile(
     r"(?is)"
@@ -37,7 +95,8 @@ def enumerate_supplement(meta: PaperMetadata, timeout: float) -> list[dict[str, 
         html = get_text(article_url, timeout=timeout)
     except FetchError:
         return []
-    return _extract_supplement_files(html, article_url)
+    files = _extract_supplement_files(html, article_url)
+    return _rewrite_supplement_urls(files, meta)
 
 
 def _extract_supplement_files(html: str, article_url: str) -> list[dict[str, Any]]:
