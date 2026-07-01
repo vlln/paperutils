@@ -20,25 +20,26 @@ paper, bibliography, doi, pubmed, arxiv, dataset, accession, bioinformatics, PMI
 
 ### Get a paper dossier
 
-Fetch a comprehensive paper dossier by DOI, PMID, PMCID, arXiv ID, URL (biorxiv, medrxiv, pubmed, arxiv), or title string. The dossier includes metadata, abstract, data availability statement, full-text links, extracted dataset accessions, code repositories, and supplement links.
+Run `paperutils get <identifier>` to fetch a dossier for a paper by DOI, PMID, PMCID, arXiv ID, URL, or title. The dossier includes metadata, abstract, data availability statement, full-text links, extracted dataset accessions, code repositories, and supplement links.
 
-Two depth levels are available: `fast` returns metadata, abstract, data availability, full-text links, and extracted accessions without verification. `full` (default) adds GWAS Catalog lookup and per-accession ENA/NCBI expansion.
+Default is `--depth full`, which expands each accession individually and checks GWAS Catalog. Use `--depth fast` when you only need metadata and extracted accessions without verification — it is significantly faster.
 
-Use `--full-abstract` for the complete abstract text. Use `--domain auto` (default), `biomed`, or `cs` to control query routing.
+Use `--full-abstract` for the complete abstract text. Use `--json` for machine-readable output.
 
 ### Search for papers
 
-Search across biomedical and computer science literature by keyword or title. The `biomed` domain queries Europe PMC and Crossref; the `cs` domain queries the arXiv Atom API. Results default to 5 items; increase with `--limit`.
+Run `paperutils find <query>` to search for papers by keyword or title. Use `--domain biomed` for biomedical literature, `--domain cs` for computer science, or `--domain auto` (default). Defaults to 5 results; increase with `--limit N`.
+
+After finding candidates, run `paperutils get` on the best match to get the full dossier.
 
 ### Explain dataset accessions
 
-Identify and describe dataset accession numbers from GEO, SRA, ENA, BioProject, Assembly, and other bioinformatics databases. Uses ENA Portal API and NCBI E-utilities. The database source is inferred from the accession prefix pattern when `--db auto` (default).
+Run `paperutils explain <accession>` to identify and describe an accession number. The database source is inferred from the accession prefix when `--db auto` (default). Override with `--db geo|ena|sra|bioproject|assembly`.
 
 ## Gotchas
 
-- Individual API failures are silently tolerated. The tool returns the best available dossier from sources that respond — partial results are normal, not errors.
-- All network calls have a default 4-second timeout per source. Slow or unresponsive endpoints may produce partial dossiers.
-- Title queries (text that is not a DOI/PMID/arXiv/URL) first search the biomedical domain, then resolve the top match's DOI for canonical metadata.
-- Deep queries (`--depth full`) are significantly slower than `--depth fast` because they expand each accession individually against ENA/NCBI. Default to `fast` unless explicit accession details are needed.
-- The tool accepts only `get`, `find`, and `explain` as subcommands. Legacy names (`resolve`, `accessions`, `lookup`, `search`) are not supported.
-- Output is YAML-like text by default. Use `--json` when machine-readable output is required.
+- Partial dossiers are normal. APIs may timeout or fail silently — the tool returns the best available data from responding sources. Do not retry or report partial results as errors.
+- `--depth full` is significantly slower than `--depth fast`. Default to `fast` unless you need verified accession details.
+- Title queries (plain text, not a DOI/PMID/arXiv/URL) first search the biomedical domain, then resolve the top match. For known identifiers, pass the identifier directly for faster, more accurate results.
+- The subcommands are `get`, `find`, and `explain` only. Legacy names are not supported.
+- Output is YAML-like text by default. Use `--json` when you need to parse the result programmatically.
