@@ -5,14 +5,14 @@ from __future__ import annotations
 import re
 import urllib.parse
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Optional
 
 from paperutils.http import FetchError, get_text
 from paperutils.models import PaperMetadata
 
 # -- Publisher-specific supplement URL rewriters ---------------------------------
 
-_Rewriter = Callable[[str, str, str], str | None]
+_Rewriter = Callable[[str, str, str], Optional[str]]
 """A rewriter takes (doi, filename, original_url) and returns a new URL or None."""
 
 

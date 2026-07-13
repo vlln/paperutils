@@ -34,6 +34,7 @@ def resolve(identifier_text: str, domain: str = "auto", timeout: float = 4.0) ->
         raise ValueError(f"unsupported identifier/domain combination: {identifier.kind}/{selected_domain}")
 
     merged = PaperMetadata()
+    failures: dict[str, str] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(fetchers)) as executor:
         futures = {
             executor.submit(fetcher.fetch, identifier, timeout): fetcher.name
@@ -43,14 +44,19 @@ def resolve(identifier_text: str, domain: str = "auto", timeout: float = 4.0) ->
         for future in done:
             try:
                 partial = future.result(timeout=0)
-            except Exception:
+            except Exception as exc:
+                failures[futures[future]] = _format_failure(exc)
                 continue
             _merge_metadata(merged, partial)
         for future in pending:
+            failures[futures[future]] = "timed out"
             future.cancel()
 
     if not merged.sources:
-        raise RuntimeError("no metadata sources returned a usable result")
+        detail = "; ".join(f"{src}: {reason}" for src, reason in failures.items())
+        if not detail:
+            detail = "no fetchers matched the identifier"
+        raise RuntimeError(f"no metadata sources returned a usable result ({detail})")
     if identifier.kind == "title":
         _enrich_title_resolution_with_canonical_doi(merged, timeout)
     if not merged.data_availability:
@@ -359,3 +365,12 @@ def _normalize_ncbi_db(db: str) -> str:
         "assembly": "assembly",
     }
     return mapping.get(db, db)
+
+
+def _format_failure(exc: BaseException) -> str:
+    """Format an exception into a short failure reason."""
+    msg = str(exc).strip()
+    if msg:
+        # Truncate long messages
+        return msg[:120] + "..." if len(msg) > 120 else msg
+    return type(exc).__name__
