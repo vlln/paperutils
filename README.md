@@ -22,22 +22,15 @@
 skit install https://github.com/vlln/paperutils/tree/main/skills/paperutils
 ```
 
-### pip
-
-```bash
-python3 -m pip install .
-paperutils --help
-```
-
 ### Run from source (no install)
 
 ```bash
 git clone https://github.com/vlln/paperutils.git
 cd paperutils
-./paperutils --help
+./skills/paperutils/scripts/paperutils --help
 ```
 
-The `./paperutils` launcher adds `src/` to `sys.path`, so no venv or pip step is needed.
+The launcher adds `skills/paperutils/scripts/src/` to `sys.path`, so no venv or pip step is needed.
 
 ### Manually
 
@@ -59,6 +52,42 @@ The `./paperutils` launcher adds `src/` to `sys.path`, so no venv or pip step is
 ## Requirements
 
 Python 3.10+. Zero runtime dependencies.
+
+## Development
+
+```bash
+git clone https://github.com/vlln/paperutils.git
+cd paperutils
+```
+
+### Running tests
+
+Source lives under `skills/paperutils/scripts/src/`. Set `PYTHONPATH` so the test runner can find the package:
+
+```bash
+# Offline unit tests
+PYTHONPATH=skills/paperutils/scripts/src python3 -m unittest discover -s tests -v
+
+# With pytest (if installed)
+PYTHONPATH=skills/paperutils/scripts/src pytest tests/ -v
+
+# Live API smoke tests
+PAPERUTILS_LIVE_TESTS=1 PYTHONPATH=skills/paperutils/scripts/src python3 -m unittest discover -s tests -v
+```
+
+Alternatively, set `PAPERUTILS_SRC` to point at the package directory:
+
+```bash
+export PAPERUTILS_SRC="$(pwd)/skills/paperutils/scripts/src"
+python3 -m unittest discover -s tests -v
+```
+
+### Running the CLI from source
+
+```bash
+./skills/paperutils/scripts/paperutils --help
+./skills/paperutils/scripts/paperutils get 10.1038/s41586-020-2649-2
+```
 
 ## License
 
@@ -202,6 +231,8 @@ Accessions are classified by prefix (23 regex patterns), then looked up in a seq
     │  pubmed   europepmc │
     └─────────────────────┘
 ```
+
+All source lives under `skills/paperutils/scripts/src/`. Tests live in `tests/` at the project root.
 
 ### Get — Resolution pipeline
 
