@@ -5,22 +5,21 @@ license: MIT
 metadata:
   author: vlln
   version: "0.1.0"
-requires:
-  env:
-    - PAPERUTILS_HOME
 ---
 
 # paperutils
+
+> `$_S` — placeholder for this skill's root directory. Set `_S` to the actual path before running commands.
 
 ## Setup
 
 The tool is embedded in this skill directory. Requires Python 3.9+. Run it as:
 
 ```
-python3 $PAPERUTILS_HOME/scripts/paperutils <subcommand> ...
+python3 $_S/scripts/paperutils <subcommand> ...
 ```
 
-If `paperutils` is already on PATH (e.g. from a pip install), prefer that over the embedded copy.
+Each subcommand supports `--help` for full option listings.
 
 ## Trigger Keywords
 
