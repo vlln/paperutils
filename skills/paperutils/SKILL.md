@@ -5,12 +5,19 @@ license: MIT
 metadata:
   author: vlln
   version: "0.1.0"
-requires:
-  bins:
-    - paperutils
 ---
 
 # paperutils
+
+## Setup
+
+The tool is embedded in this skill directory. Requires Python 3.9+. Run it as:
+
+```
+python3 <skill-dir>/scripts/paperutils <subcommand> ...
+```
+
+If `paperutils` is already on PATH (e.g. from a pip install), prefer that over the embedded copy.
 
 ## Trigger Keywords
 
