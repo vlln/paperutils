@@ -38,7 +38,7 @@ Run `paperutils explain <accession>` to identify and describe an accession numbe
 
 ## Gotchas
 
-- Partial dossiers are normal. APIs may timeout or fail silently — the tool returns the best available data from responding sources. Do not retry or report partial results as errors.
+- Partial dossiers are normal. Individual API sources may fail (timeout, HTTP errors) — the tool returns the best available data from responding sources. When *all* sources fail, the error message includes the specific reason for each (e.g. "pubmed: timed out; crossref: HTTP 429"). Do not retry or report partial results as errors.
 - `--depth full` is significantly slower than `--depth fast`. Default to `fast` unless you need verified accession details.
 - Title queries (plain text, not a DOI/PMID/arXiv/URL) first search the biomedical domain, then resolve the top match. For known identifiers, pass the identifier directly for faster, more accurate results.
 - The subcommands are `get`, `find`, and `explain` only. Legacy names are not supported.
